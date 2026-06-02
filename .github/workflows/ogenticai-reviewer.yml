@@ -1,0 +1,35 @@
+# OgenticAI Reviewer — UAT checklist gate.
+#
+# Drops in directly from the rollout template at OgenticAI/agent-reviewer.
+# Four org-level secrets must already be set on the OgenticAI org
+# (OGENTICAI_REVIEWER_APP_ID, OGENTICAI_REVIEWER_APP_KEY, ANTHROPIC_API_KEY,
+# LINEAR_API_TOKEN) — they are.
+
+name: OgenticAI Reviewer
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: OgenticAI/agent-reviewer/.github/actions/review@v2
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_app_id: ${{ secrets.OGENTICAI_REVIEWER_APP_ID }}
+          github_app_private_key: ${{ secrets.OGENTICAI_REVIEWER_APP_KEY }}
+          linear_api_token: ${{ secrets.LINEAR_API_TOKEN }}
+          # Auto-patch off until the OGE-395 diagnostic confirms downstream
+          # PR creation works end-to-end.
+          auto_patch: "false"
