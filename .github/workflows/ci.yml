@@ -57,5 +57,8 @@ jobs:
       # at runtime) needs Shield available, so install from its public git URL.
       # Once OGE-588 lands, switch to the ``[shield]`` extra in pyproject.toml.
       - run: uv pip install --python .venv/bin/python "ogentic-shield @ git+https://github.com/OgenticAI/ogentic-shield@main"
-      - run: uv pip install --python .venv/bin/python -e ".[dev]"
+      # [cloud] pulls openai/anthropic for the adapter tests in tests/adapters/.
+      # The adapters lazy-import these SDKs at construction time, but the
+      # mocked-SDK tests instantiate the adapters and need the import to succeed.
+      - run: uv pip install --python .venv/bin/python -e ".[cloud,dev]"
       - run: .venv/bin/pytest tests/ -v
