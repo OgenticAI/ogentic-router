@@ -1,0 +1,21 @@
+{
+  "id": "chatcmpl-ollama-test",
+  "object": "chat.completion",
+  "created": 1717500000,
+  "model": "llama3.2:3b",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello back from Ollama."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 7,
+    "completion_tokens": 5,
+    "total_tokens": 12
+  }
+}
