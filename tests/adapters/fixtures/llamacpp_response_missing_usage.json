@@ -1,0 +1,15 @@
+{
+  "object": "chat.completion",
+  "created": 1717500001,
+  "model": "qwen2.5-3b-instruct-q4_k_m.gguf",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello back from llama.cpp."
+      },
+      "finish_reason": "end_turn"
+    }
+  ]
+}
