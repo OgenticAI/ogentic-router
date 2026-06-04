@@ -1,0 +1,38 @@
+# Canonical ogentic-router policy file (OGE-579 v0.1).
+#
+# Read top-to-bottom: first matching rule wins, otherwise `default_backend`
+# fires. Loaded by `Policy.from_yaml("examples/policy.yaml")`; the round-trip
+# property is locked by `tests/test_policy.py::test_to_dict_round_trips_canonical`.
+#
+# Routing logic — most-cautious-first:
+#   1. Anything Shield flags as privileged, PHI, or MNPI stays on-device.
+#   2. Anything with a high overall sensitivity score (≥ 70) also stays local.
+#   3. Medium-sensitivity content (30..69) gets `Shield.redact()` applied
+#      before going to the cloud backend — masks "who" while preserving "how big".
+#   4. Everything else (the catch-all 0..29 band) goes to the cloud cleartext.
+#   5. Anything that misses every rule falls back to `default_backend`.
+
+version: 1
+default_backend: ollama-local
+
+rules:
+  - id: "privilege-stays-local"
+    when:
+      groups_include: [PRIVILEGE, PHI, MNPI]
+    route: ollama-local
+
+  - id: "high-sensitivity-stays-local"
+    when:
+      sensitivity_score_gte: 70
+    route: ollama-local
+
+  - id: "medium-redact-then-cloud"
+    when:
+      sensitivity_score_gte: 30
+    route: openai-cloud
+    transform: shield_redact
+
+  - id: "low-cloud"
+    when:
+      sensitivity_score_gte: 0
+    route: openai-cloud
