@@ -20,3 +20,5 @@ __all__ = [
     "Transform",
     "__version__",
 ]
+
+from ogentic_router import adapters  # noqa: E402,F401  (re-export submodule)
