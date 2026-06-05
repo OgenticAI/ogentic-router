@@ -52,13 +52,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v3
       - run: uv venv --python ${{ matrix.python }}
-      # ogentic-shield is not on PyPI yet (tracked on OGE-588). Until it ships,
-      # the policy DSL's category-name validator (which imports CategoryGroup
-      # at runtime) needs Shield available, so install from its public git URL.
-      # Once OGE-588 lands, switch to the ``[shield]`` extra in pyproject.toml.
-      - run: uv pip install --python .venv/bin/python "ogentic-shield @ git+https://github.com/OgenticAI/ogentic-shield@main"
-      # [cloud] pulls openai/anthropic for the adapter tests in tests/adapters/.
+      # [shield] resolves ogentic-shield from PyPI (v0.3.0+ as of OGE-588).
+      # The policy DSL's category-name validator imports CategoryGroup at
+      # runtime, so Shield must be available in the test job.
+      # [cloud]  pulls openai/anthropic for the adapter tests in tests/adapters/.
       # The adapters lazy-import these SDKs at construction time, but the
       # mocked-SDK tests instantiate the adapters and need the import to succeed.
-      - run: uv pip install --python .venv/bin/python -e ".[cloud,dev]"
+      - run: uv pip install --python .venv/bin/python -e ".[shield,cloud,dev]"
       - run: .venv/bin/pytest tests/ -v
