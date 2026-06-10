@@ -1,4 +1,4 @@
-"""Router-level exception types (OGE-580).
+"""Router-level exception types (OGE-580 / OGE-583).
 
 Two-class hierarchy on purpose. ``RouterError`` is the catch-all base — higher
 layers (the OGE-583 server, OGE-585 CLI, OGE-586 MCP tool surface) should be
@@ -10,6 +10,12 @@ callers using the standard ``except ImportError`` pattern for optional-extra
 handling also catch it. That dual-inheritance is the v0.1 ergonomics call: it
 matches the way Python typically signals "you didn't install the extra"
 without forcing consumers to know about a router-specific exception type.
+
+OGE-583 additions (server layer):
+
+- :class:`ServerError` — generic server-level failure (startup, routing, etc.)
+- :class:`ConfigError` — router.yaml parse / validation failure
+- :class:`ServerImportError` — ``[server]`` extra (fastapi / uvicorn) missing
 """
 
 from __future__ import annotations
@@ -46,4 +52,41 @@ class ShieldUnavailableError(RouterError, ImportError):
     """
 
 
-__all__ = ["RouterError", "ShieldUnavailableError"]
+class ServerError(RouterError):
+    """Raised for server-level failures (startup, routing, response errors).
+
+    Added in OGE-583 for the FastAPI server layer. Covers:
+    - Startup failures (config load, adapter construction, etc.)
+    - Runtime routing failures that cannot be surfaced as HTTP errors
+    - Any unexpected condition inside the server that doesn't fit a more
+      specific subclass.
+    """
+
+
+class ConfigError(RouterError, ValueError):
+    """Raised when router.yaml fails to parse or validate.
+
+    Added in OGE-583. Subclasses :class:`ValueError` so callers using
+    ``except ValueError`` for config-validation patterns also catch it.
+    The message always includes the file path and the exact validation
+    failure so operators can fix the config without reading source code.
+    """
+
+
+class ServerImportError(ServerError, ImportError):
+    """Raised when the ``[server]`` extra (fastapi / uvicorn) is not installed.
+
+    Added in OGE-583. Mirrors the :class:`ShieldUnavailableError` dual-
+    inheritance pattern — callers using ``except ImportError`` will catch it.
+    The message includes the canonical install hint
+    (``pip install 'ogentic-router[server]'``).
+    """
+
+
+__all__ = [
+    "ConfigError",
+    "RouterError",
+    "ServerError",
+    "ServerImportError",
+    "ShieldUnavailableError",
+]

@@ -1,0 +1,18 @@
+version: 1
+policy_path: policy.yaml
+shield:
+  profiles: []
+audit: {}
+backends:
+  - id: openai-cloud
+    kind: openai
+    api_key_env: OPENAI_API_KEY
+    default_model: gpt-4o-mini
+  - id: anthropic-cloud
+    kind: anthropic
+    api_key_env: ANTHROPIC_API_KEY
+    default_model: claude-sonnet-4-5
+  - id: ollama-local
+    kind: ollama
+    base_url: http://localhost:11434
+    default_model: llama3
