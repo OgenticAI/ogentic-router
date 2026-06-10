@@ -39,7 +39,8 @@ jobs:
       # mypy reads policy/models.py which does ``from ogentic_shield import CategoryGroup``
       # inside a function. ``ignore_missing_imports = true`` in pyproject.toml keeps
       # mypy lenient on unresolved deps, so no Shield install needed here.
-      - run: uv pip install --python .venv/bin/python -e ".[dev]"
+      # [server] pulls fastapi so mypy can resolve the decorator types in server/app.py.
+      - run: uv pip install --python .venv/bin/python -e ".[server,dev]"
       - run: .venv/bin/mypy src/
 
   test:
@@ -58,5 +59,6 @@ jobs:
       # [cloud]  pulls openai/anthropic for the adapter tests in tests/adapters/.
       # The adapters lazy-import these SDKs at construction time, but the
       # mocked-SDK tests instantiate the adapters and need the import to succeed.
-      - run: uv pip install --python .venv/bin/python -e ".[shield,cloud,dev]"
+      # [server] pulls fastapi/uvicorn for the OGE-583 server tests in tests/server/.
+      - run: uv pip install --python .venv/bin/python -e ".[shield,cloud,server,dev]"
       - run: .venv/bin/pytest tests/ -v
