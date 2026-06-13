@@ -1,7 +1,7 @@
-"""Smoke tests for the v0.0.1 scaffold.
+"""Smoke tests for package import and CLI scaffold.
 
 Tightly scoped: prove the package imports, the version is exposed, and the
-CLI registers cleanly. Real test surface lands with each v0.1 build ticket.
+CLI registers cleanly.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from ogentic_router.cli.main import cli
 
 def test_version_is_exposed() -> None:
     assert isinstance(ogentic_router.__version__, str)
-    assert ogentic_router.__version__.startswith("0.0.1")
+    assert ogentic_router.__version__ == "0.1.0"
 
 
 def test_cli_help_runs_clean() -> None:

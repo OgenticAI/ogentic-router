@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ogentic-router"
-version = "0.0.1.dev0"
+version = "0.1.0"
 description = "Privacy-aware LLM routing: sensitive content stays local; redacted content may go to cloud."
 readme = "README.md"
 license = "Apache-2.0"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["llm", "routing", "privacy", "hipaa", "privilege", "mnpi", "ollama", "local-first"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
@@ -78,6 +78,7 @@ Homepage = "https://github.com/OgenticAI/ogentic-router"
 Documentation = "https://github.com/OgenticAI/ogentic-router#readme"
 Issues = "https://github.com/OgenticAI/ogentic-router/issues"
 Source = "https://github.com/OgenticAI/ogentic-router"
+Changelog = "https://github.com/OgenticAI/ogentic-router/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ogentic-router = "ogentic_router.cli.main:cli"
