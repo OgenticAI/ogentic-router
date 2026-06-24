@@ -6,7 +6,7 @@
 #   - types  — mypy on src/
 #   - test   — pytest on the matrix of supported Pythons
 #
-# All jobs run in parallel; matrix the test job over 3.10 / 3.11 / 3.12
+# All jobs run in parallel; matrix the test job over 3.10 / 3.11 / 3.12 / 3.13
 # to lock the supported-Python claim in pyproject.toml.
 
 name: CI
@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.11", "3.12"]
+        python: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v3
