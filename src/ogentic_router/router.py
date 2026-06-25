@@ -37,7 +37,8 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 import yaml
 
 from .classification import ShieldClassification
-from .errors import RouterError, ShieldUnavailableError
+from .cost import estimate_cost
+from .errors import BudgetCeilingExceeded, RouterError, ShieldUnavailableError
 from .policy import Policy, RouteDecision
 
 if TYPE_CHECKING:  # pragma: no cover - import only for type hints
@@ -262,7 +263,13 @@ class Router:
         result = shield.analyze(prompt)
         return self._project(result)
 
-    def route(self, prompt: str) -> RouteDecision:
+    def route(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        budget_ceiling: float | None = None,
+    ) -> RouteDecision:
         """Classify ``prompt`` and run it through the loaded Policy.
 
         Equivalent to ``policy.evaluate(classify(prompt))`` but slightly more
@@ -270,7 +277,34 @@ class Router:
         the Policy's ``category_in`` / ``category_not_in`` predicates can
         fire against entities that aren't surfaced on the user-facing
         :class:`ShieldClassification` projection.
+
+        Args:
+            prompt: The prompt text to route.
+            model: Optional model identifier used for budget estimation
+                (e.g. ``"gpt-4-turbo"``, ``"opus-4"``).  Required when
+                ``budget_ceiling`` is set; ignored otherwise.
+            budget_ceiling: Optional maximum estimated USD cost for this call.
+                ``None`` (default) — no enforcement, current behaviour.
+                ``0.0`` — refuse all calls (dry-run mode).
+                ``> 0`` — raise :class:`~ogentic_router.BudgetCeilingExceeded`
+                if the estimated input-token cost exceeds this value.
+                The check runs **before** any Shield analysis or network call.
+
+        Raises:
+            BudgetCeilingExceeded: if ``budget_ceiling`` is set and the
+                estimated cost of sending ``prompt`` to ``model`` exceeds it.
+                The call is never sent to any provider.
         """
+        if budget_ceiling is not None:
+            effective_model = model or "unknown"
+            cost = estimate_cost(effective_model, prompt)
+            if cost > budget_ceiling:
+                raise BudgetCeilingExceeded(
+                    estimated_cost=cost,
+                    ceiling=budget_ceiling,
+                    model=effective_model,
+                )
+
         shield = self._ensure_shield()
         result = shield.analyze(prompt)
         projection = self._project(result)

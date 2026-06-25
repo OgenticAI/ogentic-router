@@ -76,6 +76,41 @@ uv pip install -e ".[dev]"
 
 v0.1 milestone target: **2026-08-31**. See the [Linear project](https://linear.app/ogenticai/project/ogentic-router-oss-46e612b52d27) for tickets and progress.
 
+## Budget ceiling (fail-fast cost enforcement)
+
+Use `--budget-ceiling <USD>` to prevent accidental overspend on batch jobs against expensive models. The estimated input-token cost is checked **before** the call leaves the device — no partial sends.
+
+```bash
+# Fail fast if the estimated cost exceeds $0.001
+ogentic-router route --model opus-4 --prompt 'hello' --budget-ceiling 0.001
+# => exits 1: BudgetCeilingExceeded: estimated $X exceeds ceiling $0.001
+
+# Dry-run mode: refuse all calls (ceiling=0)
+ogentic-router route --model opus-4 --prompt 'hello' --budget-ceiling 0
+
+# No ceiling: route normally
+ogentic-router route --model gpt-4-turbo --prompt 'hello'
+```
+
+Python API:
+
+```python
+from ogentic_router import Router, BudgetCeilingExceeded
+
+router = Router(policy=policy, shield=shield)
+try:
+    decision = router.route(prompt, model="opus-4", budget_ceiling=0.001)
+except BudgetCeilingExceeded as e:
+    print(f"Blocked: estimated ${e.estimated_cost:.6g} > ceiling ${e.ceiling}")
+```
+
+**Ceiling semantics:**
+- `None` (default) — no enforcement, current behaviour
+- `0.0` — refuse all calls (dry-run mode)
+- `> 0` — raise `BudgetCeilingExceeded` if estimated cost exceeds the value
+
+The cost estimate uses prompt token count only (output tokens are unknown pre-call). Approximate — 4 characters per token, English average.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
