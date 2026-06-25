@@ -132,5 +132,64 @@ def serve(
     uvicorn.run(app, host=host, port=port, reload=reload)
 
 
+@cli.command("route")
+@click.option(
+    "--model",
+    required=True,
+    metavar="MODEL",
+    help="Model identifier to route to (e.g. 'gpt-4-turbo', 'opus-4').",
+)
+@click.option(
+    "--prompt",
+    "prompt_text",
+    required=True,
+    metavar="TEXT",
+    help="Prompt text to route.",
+)
+@click.option(
+    "--budget-ceiling",
+    "budget_ceiling",
+    default=None,
+    type=float,
+    metavar="USD",
+    help=(
+        "Maximum estimated USD cost for this call. "
+        "Exits non-zero with an error if the estimate exceeds the ceiling. "
+        "0.0 refuses all calls (dry-run mode). Omit to disable enforcement."
+    ),
+)
+def route(
+    model: str,
+    prompt_text: str,
+    budget_ceiling: float | None,
+) -> None:
+    """Route a prompt through the cost-aware budget enforcer.
+
+    Checks the estimated cost of sending PROMPT to MODEL before any network
+    call is made. If --budget-ceiling is set and the estimate exceeds it,
+    the command exits non-zero with a BudgetCeilingExceeded error on stderr.
+
+    Example:
+
+    \b
+      ogentic-router route --model opus-4 --prompt 'hello' --budget-ceiling 0.001
+    """
+    from ogentic_router.cost import estimate_cost  # noqa: PLC0415
+    from ogentic_router.errors import BudgetCeilingExceeded  # noqa: PLC0415
+
+    if budget_ceiling is not None:
+        cost = estimate_cost(model, prompt_text)
+        if cost > budget_ceiling:
+            exc = BudgetCeilingExceeded(
+                estimated_cost=cost,
+                ceiling=budget_ceiling,
+                model=model,
+            )
+            click.echo(str(exc), err=True)
+            sys.exit(1)
+
+    click.echo(f"routed: model={model} budget_ceiling={budget_ceiling}")
+
+
 if __name__ == "__main__":
     cli()

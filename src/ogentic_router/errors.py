@@ -1,4 +1,4 @@
-"""Router-level exception types (OGE-580 / OGE-583).
+"""Router-level exception types (OGE-580 / OGE-583 / OGE-1061).
 
 Two-class hierarchy on purpose. ``RouterError`` is the catch-all base — higher
 layers (the OGE-583 server, OGE-585 CLI, OGE-586 MCP tool surface) should be
@@ -16,6 +16,10 @@ OGE-583 additions (server layer):
 - :class:`ServerError` — generic server-level failure (startup, routing, etc.)
 - :class:`ConfigError` — router.yaml parse / validation failure
 - :class:`ServerImportError` — ``[server]`` extra (fastapi / uvicorn) missing
+
+OGE-1061 additions (budget ceiling):
+
+- :class:`BudgetCeilingExceeded` — estimated call cost exceeds configured ceiling
 """
 
 from __future__ import annotations
@@ -83,7 +87,29 @@ class ServerImportError(ServerError, ImportError):
     """
 
 
+class BudgetCeilingExceeded(RouterError):
+    """Raised when the estimated cost of a call exceeds the configured ceiling.
+
+    Added in OGE-1061. The check happens **before** any network call — the
+    prompt is never sent to a provider when this exception is raised.
+
+    Attributes:
+        estimated_cost: Estimated USD cost for the call (input tokens only).
+        ceiling: The configured budget ceiling in USD.
+        model: The model identifier used for cost estimation.
+    """
+
+    def __init__(self, estimated_cost: float, ceiling: float, model: str) -> None:
+        self.estimated_cost = estimated_cost
+        self.ceiling = ceiling
+        self.model = model
+        super().__init__(
+            f"BudgetCeilingExceeded: estimated ${estimated_cost:.6g} exceeds ceiling ${ceiling}"
+        )
+
+
 __all__ = [
+    "BudgetCeilingExceeded",
     "ConfigError",
     "RouterError",
     "ServerError",
