@@ -7,16 +7,19 @@ and see, for each prompt, which backend it went to and why.
     pip install -e ".[shield]"
     python examples/audit_replay.py
 
-Honest scope note: automatic emission of decisions to ``ogentic-audit`` is a
-v0.2 deliverable (OGE-584) — the Router does not yet write an audit log on its
-own. What IS shipped today is the decision record itself: ``RouteDecision``
-serializes to a stable dict via ``.to_dict()``. This example demonstrates the
-replay contract end-to-end by (1) making real decisions, (2) writing them as
-JSON-lines exactly as the audit sink will, and (3) replaying that file. When
-audit emission lands, step 1/2 move into the Router and only step 3 remains.
+The Router emits these rows for you when configured with a ``LocalFileSink``
+(``audit: {sink: local_file, path: ...}``) — one shape-only row per ``route()``
+call. This example is self-contained: it makes real decisions and writes them as
+JSON-lines exactly as ``LocalFileSink`` does, then replays that file. Point the
+replay at your real ``audit.jsonl`` to review a production log the same way.
 
-The replayed record shape (one JSON object per line):
-    {"backend_id": ..., "rule_id": ..., "transform": ..., "reasoning": ...}
+The ``RouteDecisionAudit`` row shape (one JSON object per line) includes
+``ts``, ``request_id``, ``prompt_hash``, ``sensitivity_score``, ``route_decision``,
+``rule_id``, ``transform``, ``backend_is_local``, ``error``, and more — shape-only,
+never the raw prompt.
+
+Note: the HMAC-*chained*, tamper-evident ``OgenticAuditSink`` lights up once
+``ogentic-audit`` publishes to PyPI; ``LocalFileSink`` is the v0.1 sink.
 """
 
 from __future__ import annotations
@@ -26,36 +29,40 @@ import tempfile
 from pathlib import Path
 
 from ogentic_router import Policy, Router
+from ogentic_router.audit import LocalFileSink
 
 POLICY_PATH = Path(__file__).parent / "policy.yaml"
 
 
 def write_sample_log(path: Path) -> None:
-    """Make real decisions and serialize them as the audit sink will."""
-    router = Router(Policy.from_yaml(POLICY_PATH))
+    """Make real decisions with a LocalFileSink — exactly as production would."""
+    router = Router(Policy.from_yaml(POLICY_PATH), audit_sink=LocalFileSink(path))
     prompts = [
         "What time is the standup?",
         "Summarize the sealed deposition transcript for the privileged file.",
         "Redraft the earnings note before the numbers are public.",
     ]
-    with path.open("w", encoding="utf-8") as fh:
-        for prompt in prompts:
-            record = router.route(prompt).to_dict()
-            fh.write(json.dumps(record) + "\n")
+    for prompt in prompts:
+        router.route(prompt)  # the sink appends one RouteDecisionAudit row
 
 
 def replay(path: Path) -> None:
-    """Read the JSON-lines file back and print each decision."""
+    """Read the JSON-lines audit file back and print each decision."""
     with path.open(encoding="utf-8") as fh:
         for i, line in enumerate(fh, start=1):
-            record = json.loads(line)
-            transform = record.get("transform") or "(none)"
+            row = json.loads(line)
+            transform = row.get("transform") or "(none)"
+            local = {True: "local", False: "cloud", None: "?"}[row.get("backend_is_local")]
             print(
-                f"[{i}] backend={record['backend_id']:<14} "
-                f"rule={record['rule_id'] or '(default)':<28} "
+                f"[{i}] backend={row['route_decision'] or '(default)':<14} "
+                f"({local})  rule={row['rule_id'] or '(default)':<28} "
                 f"transform={transform}"
             )
-            print(f"     why: {record['reasoning']}")
+            print(
+                f"     score={row['sensitivity_score']} "
+                f"groups={row['groups_found']} hash={row['prompt_hash']} "
+                f"error={row['error']}"
+            )
 
 
 def main() -> None:

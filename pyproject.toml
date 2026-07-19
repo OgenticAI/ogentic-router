@@ -33,6 +33,11 @@ dependencies = [
     "rich>=13.0",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    # LocalFileSink is the default non-Noop audit sink (OGE-584); its
+    # cross-platform advisory lock uses filelock. Tiny (~30 KB), so it lives
+    # in the base install rather than behind an extra — audit-to-local-file
+    # works out of the box with no extra to remember.
+    "filelock>=3.12",
 ]
 
 [project.optional-dependencies]
@@ -59,7 +64,11 @@ server = [
 ]
 # MCP tool surface — router.classify_route etc.
 mcp = ["mcp>=1.0"]
-# Audit integration once ogentic-audit ships. Stubbed for now.
+# ogentic-audit HMAC-chained log integration (OgenticAuditSink). Empty until
+# ogentic-audit publishes to PyPI — the sink lazy-imports it and raises
+# AuditUnavailableError with this extra's install hint until then. LocalFileSink
+# (the v0.1 default non-Noop sink) needs nothing here; its filelock dep is in
+# the base install.
 audit = []
 # Everything.
 all = ["ogentic-router[shield,cloud,local,server,mcp,audit]"]
