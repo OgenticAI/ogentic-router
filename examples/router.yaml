@@ -1,10 +1,16 @@
 # Router server config — consumed by the OpenAI-shaped server via ROUTER_CONFIG.
 #
-#   pip install -e ".[shield,cloud,server]"
+#   pip install -e ".[server,local]"
 #   ROUTER_CONFIG=examples/router.yaml ogentic-router serve
+#   # -> http://127.0.0.1:8080
 #
-# The server loads this file, resolves each backend's API key from the named
-# environment variable, and exposes localhost:8080/v1/chat/completions.
+# As shipped this is **local-only and keyless**: it declares just the Ollama
+# backend, so `serve` starts with no API keys set and routes to a model on your
+# own machine. That is the local-first quickstart the README walks through.
+#
+# The server requires an API key for every backend it is told about, so the
+# cloud backend below is commented out — uncomment it *and* export
+# OPENAI_API_KEY, or the server will refuse to start.
 #
 # v0.1 caveat: the server selects the backend named by the policy's
 # `default_backend` (it does not yet run the full Shield -> policy pipeline
@@ -29,15 +35,16 @@ audit:
   path: ~/.ogentic-router/audit.jsonl
 
 # Backends the server can dispatch to. `id` must match the `route:` /
-# `default_backend` values in policy.yaml. `api_key_env` names the environment
-# variable the key is read from — keys are never inlined here.
+# `default_backend` values in policy.yaml. Local backends are loopback-only.
 backends:
   - id: ollama-local
     kind: ollama
     base_url: http://localhost:11434
     default_model: llama3.2:3b
 
-  - id: openai-cloud
-    kind: openai
-    api_key_env: OPENAI_API_KEY
-    default_model: gpt-4o-mini
+  # Cloud backend — uncomment and `export OPENAI_API_KEY=...` to enable.
+  # The key is read from the named env var at startup; it is never inlined here.
+  # - id: openai-cloud
+  #   kind: openai
+  #   api_key_env: OPENAI_API_KEY
+  #   default_model: gpt-4o-mini
