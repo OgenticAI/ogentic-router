@@ -1,0 +1,36 @@
+# Router server config — consumed by the OpenAI-shaped server via ROUTER_CONFIG.
+#
+#   pip install -e ".[shield,cloud,server]"
+#   ROUTER_CONFIG=examples/router.yaml ogentic-router serve
+#
+# The server loads this file, resolves each backend's API key from the named
+# environment variable, and exposes localhost:8080/v1/chat/completions.
+#
+# v0.1 caveat: the server selects the backend named by the policy's
+# `default_backend` (it does not yet run the full Shield -> policy pipeline
+# per-request; that lands in v0.2, OGE-584). The policy is still loaded and
+# surfaced at GET /v1/policy so you can inspect the rules that WILL apply.
+
+version: 1
+
+# Path is resolved relative to this config file's directory.
+policy_path: policy.yaml
+
+# Optional Shield tuning forwarded to ogentic_shield.Shield(**kwargs).
+shield:
+  profiles: []
+  config: {}
+
+# Backends the server can dispatch to. `id` must match the `route:` /
+# `default_backend` values in policy.yaml. `api_key_env` names the environment
+# variable the key is read from — keys are never inlined here.
+backends:
+  - id: ollama-local
+    kind: ollama
+    base_url: http://localhost:11434
+    default_model: llama3.2:3b
+
+  - id: openai-cloud
+    kind: openai
+    api_key_env: OPENAI_API_KEY
+    default_model: gpt-4o-mini

@@ -1,0 +1,37 @@
+# Sotto Desktop — embedded router configuration (example).
+#
+# Sotto Desktop bundles ogentic-router in-process (src-tauri/src/router.rs) and
+# reads this TOML from its own app config. Sotto's config is TOML; the router's
+# own config (the file `router_config` points at below) is YAML — see
+# examples/router.yaml. This file is the Sotto-side wrapper, not something the
+# router loads directly.
+#
+# Full walkthrough: docs/SOTTO_INTEGRATION.md.
+
+[router]
+# Path to the router's YAML config (RouterConfig schema, see examples/router.yaml).
+# Sotto ships this file inside the app bundle and passes its path to the router.
+router_config = "resources/router.yaml"
+
+# Where Sotto writes the decision log. Until ogentic-audit emission ships (v0.2,
+# OGE-584) this is the sink Sotto's own wrapper appends RouteDecision.to_dict()
+# rows to; afterwards it becomes the ogentic-audit log destination.
+audit_log = "~/Library/Application Support/Sotto/router-decisions.jsonl"
+
+[router.local]
+# Local backend Sotto talks to on-device. Loopback-only is enforced by the
+# router's local adapters — a non-loopback host raises LocalhostOnlyError.
+ollama_endpoint = "http://localhost:11434"
+default_model = "llama3.2:3b"
+
+[router.cloud]
+# Cloud backend for cleared / redacted content only. The key is read from the
+# environment by the router at dispatch time; it is never stored in this file.
+openai_api_key_env = "OPENAI_API_KEY"
+default_model = "gpt-4o-mini"
+
+[privacy]
+# Sotto's posture: sensitive content (privilege / PHI / MNPI, or score >= 70)
+# must never leave the device. This mirrors examples/policy.yaml; the policy
+# file is the source of truth and this block is documentation of intent.
+sensitive_stays_local = true
