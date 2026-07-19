@@ -61,20 +61,22 @@ def cli() -> None:
     default=False,
     help="Enable auto-reload on code changes (development only).",
 )
-# TODO(OGE-586): --mcp flag — MCP tool surface for router.classify_route etc.
-# When OGE-586 lands, add:
-#   @click.option("--mcp", is_flag=True, default=False,
-#                 help="Enable the MCP tool surface alongside the HTTP server.")
-# and wire it through to the MCP server startup logic.
+@click.option(
+    "--mcp",
+    is_flag=True,
+    default=False,
+    help="Boot the stdio MCP tool surface instead of the HTTP server (OGE-586).",
+)
 def serve(
     config_path: str | None,
     host: str,
     port: int,
     reload: bool,
+    mcp: bool,
 ) -> None:
-    """Start the OpenAI-shaped router HTTP server.
+    """Start the router server — HTTP by default, or the MCP tool surface with --mcp.
 
-    The server exposes:
+    The HTTP server exposes:
 
     \b
       GET  /healthz                 — liveness probe
@@ -83,11 +85,20 @@ def serve(
       GET  /v1/policy               — inspect the loaded routing policy
       GET  /v1/decision/{id}        — decision lookup (v0.2, pending ogentic-audit)
 
+    With --mcp, a stdio MCP server is booted instead (for Claude Desktop / Goose /
+    Cursor / Sotto), exposing router.classify_route + three introspection tools.
+    Same config file (router.yaml); the transport diverges at boot.
+
     Example:
 
     \b
       ogentic-router serve --config router.yaml --port 8080
+      ogentic-router serve --mcp --config router.yaml
     """
+    if mcp:
+        _serve_mcp(config_path)
+        return
+
     # Warn loudly when binding to all interfaces.
     if host == "0.0.0.0":
         click.echo(
@@ -130,6 +141,38 @@ def serve(
 
     app = create_app()
     uvicorn.run(app, host=host, port=port, reload=reload)
+
+
+def _serve_mcp(config_path: str | None) -> None:
+    """Build the Router from config and run the stdio MCP server."""
+    if not config_path:
+        click.echo(
+            "ERROR: --mcp needs a config. Pass --config <router.yaml> or set "
+            "$ROUTER_CONFIG.",
+            err=True,
+        )
+        sys.exit(1)
+    from ogentic_router.router import Router  # noqa: PLC0415
+
+    try:
+        from ogentic_router.mcp import build_server  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - build_server itself raises the hint
+        click.echo(
+            "ERROR: the MCP tool surface needs the [mcp] extra. "
+            "Install with: pip install 'ogentic-router[mcp]'",
+            err=True,
+        )
+        sys.exit(1)
+
+    try:
+        router = Router.from_yaml(config_path)
+        server = build_server(router)
+    except Exception as exc:  # noqa: BLE001 - surface a clean CLI error
+        click.echo(f"ERROR: {exc}", err=True)
+        sys.exit(1)
+
+    click.echo(f"Starting ogentic-router MCP server (stdio). Config: {config_path}", err=True)
+    server.run(transport="stdio")
 
 
 @cli.command("route")

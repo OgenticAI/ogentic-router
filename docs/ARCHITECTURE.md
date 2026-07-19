@@ -100,5 +100,13 @@ routing already happened. Rows carry a `prompt_hash`, never raw text. See the
   `ogentic-audit` publishes to PyPI. Local-file and Noop sinks work today.
 - **Server decision lookup** — `GET /v1/decision/{id}` is a stub; per-request
   server-side audit + lookup lands with the server's v0.2 Shield pipeline.
-- **MCP tool surface** — the `[mcp]` extra reserves the dependency, but no MCP
-  server or `router.classify_route` tool ships in v0.1 (planned as OGE-586).
+
+## MCP tool surface
+
+`ogentic-router serve --mcp` boots a stdio MCP server exposing four shape-only
+tools — `router.classify_route`, `router.policies`, `router.adapters`,
+`router.evaluate_dry` — so an assistant can ask which backend a prompt would take
+*without* firing the LLM call. Same `router.yaml`; the transport diverges at
+boot. `build_server(router)` lazy-imports the MCP SDK, so the module imports fine
+without the `[mcp]` extra. See the [MCP](../README.md#mcp) section and
+`src/ogentic_router/mcp/`.

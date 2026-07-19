@@ -124,6 +124,15 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
 
+# The MCP tool decorators (@server.tool(...)) come from FastMCP, which is an
+# optional [mcp] extra. In the base type-check job the SDK isn't installed, so
+# FastMCP resolves to Any and the decorators read as "untyped" under strict
+# mode. The tool functions themselves are fully annotated; scope-off just the
+# untyped-decorator complaint for this module rather than weakening it globally.
+[[tool.mypy.overrides]]
+module = "ogentic_router.mcp.server"
+disallow_untyped_decorators = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
