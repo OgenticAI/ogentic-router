@@ -250,7 +250,7 @@ that. It solves a different problem. Full breakdown:
 [docs/COMPARISON.md](docs/COMPARISON.md) · privacy officer's one-pager:
 [docs/PRIVACY_POSTURE.md](docs/PRIVACY_POSTURE.md).
 
-*Competitor data as of 2026-06-03.*
+*Landscape framing from the 2026-06-03 scan; figures re-verified 2026-07-19 (sources linked below).*
 
 | | OpenRouter / Merge / Portkey | ogentic-router |
 |---|---|---|
@@ -275,10 +275,13 @@ real control, but it answers a different question:
 | Who can be compelled to produce it? | The vendor, while it holds it | No third party ever holds it |
 | Verified how? | Vendor attestation | Runs in your process; open source |
 
-OpenRouter is the category leader — **400+ models, 60+ providers, 250k+ apps,
-4.2M+ users, $113M Series B led by CapitalG** (as of 2026-06-03). We don't
-compete on breadth; we answer the regulated-content question they structurally
-can't. Sourcing and per-product notes: [docs/COMPARISON.md](docs/COMPARISON.md).
+OpenRouter is the category leader — **400+ models, 70+ providers, 250k+ apps,
+4.2M+ users** ([openrouter.ai](https://openrouter.ai), observed 2026-07-19) and a
+**$113M Series B led by CapitalG**
+([announcement](https://openrouter.ai/blog/announcements/series-b/), 2026-05-28).
+We don't compete on breadth; we answer the regulated-content question they
+structurally can't. Full sourcing table and per-product notes:
+[docs/COMPARISON.md](docs/COMPARISON.md).
 
 ## Examples & docs
 

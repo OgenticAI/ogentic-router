@@ -1,9 +1,9 @@
 # How ogentic-router compares
 
-> **Data current as of 2026-06-03.** Competitor scale and feature claims below
-> are from that date's landscape scan and are not re-verified on every release.
-> Where a figure can't be sourced it's dropped rather than guessed. See
-> [Sourcing](#sourcing) at the bottom.
+> **Landscape framing from the 2026-06-03 scan; all figures re-verified against
+> primary sources on 2026-07-19.** Every external number below carries a source
+> link — see the [Sourcing](#sourcing) table at the bottom. Where a figure can't
+> be sourced it's dropped rather than guessed.
 
 `ogentic-router` is **not** a drop-in replacement for a SaaS AI gateway for most
 teams. If you route on cost, latency, or model breadth and your content isn't
@@ -51,13 +51,25 @@ gap ogentic-router is built to close.
 ## Acknowledging the category leader
 
 OpenRouter is the category leader by a wide margin, and this document is not a
-claim otherwise. As of 2026-06-03 it offered **400+ models across 60+
-providers**, served **250k+ apps** and **4.2M+ users**, and had raised a **$113M
-Series B led by CapitalG** (announced May 2026). With that runway it will keep
-extending into the privacy lane — which is precisely why naming the architectural
-distinction explicitly matters now: without it, a buyer comparing the two on a
-feature checklist will conclude they're equivalent. They aren't. They answer
-different questions.
+claim otherwise. As displayed on [openrouter.ai](https://openrouter.ai)
+(observed **2026-07-19**): **400+ models**, **70+ providers**, **250k+ apps**,
+**4.2M+ users globally**. In its
+[Series B announcement](https://openrouter.ai/blog/announcements/series-b/)
+(**2026-05-28**) it reported raising **$113M led by CapitalG** — Alphabet's
+growth fund, with NVentures, ServiceNow, MongoDB, Snowflake, Databricks, a16z and
+Menlo participating — serving **8M+ developers** across **400+ models**, with
+weekly volume up from 5T to **25T tokens**. TechCrunch
+[reported](https://techcrunch.com/2026/05/26/openrouter-more-than-doubles-valuation-to-1-3b-in-a-year/)
+a **$1.3B** post-money valuation.
+
+*(OpenRouter's own site and its Series B post state different user counts —
+"4.2M+ users" vs "8M+ developers" — so both are cited with their source rather
+than picking one.)*
+
+With that runway it will keep extending into the privacy lane — which is
+precisely why naming the architectural distinction explicitly matters now:
+without it, a buyer comparing the two on a feature checklist will conclude
+they're equivalent. They aren't. They answer different questions.
 
 ## Per-product notes
 
@@ -99,14 +111,21 @@ not the decision layer.
 
 ## Sourcing
 
-- OpenRouter product scale (model/provider/app/user counts) and the Guardrails
-  feature set: OpenRouter, <https://openrouter.ai> and
-  <https://openrouter.ai/models>, as observed 2026-06-03.
-- OpenRouter Series B ($113M, led by CapitalG): reported May 2026. **Open item:**
-  the exact announcement/press URL should be attached before this doc is cited
-  externally; the figure is retained here because it appears in the source ticket
-  (OGE-587) but is flagged pending a durable link.
-- Merge Gateway: <https://www.merge.dev/gateway>.
+Every external figure quoted above, with its source and the date it was observed:
+
+| Claim | Source | Date |
+|---|---|---|
+| 400+ models · 70+ providers · 250k+ apps · 4.2M+ users | <https://openrouter.ai> | observed 2026-07-19 |
+| $113M Series B led by CapitalG; 8M+ developers; 5T→25T weekly tokens | [OpenRouter, "OpenRouter Raises $113M Series B"](https://openrouter.ai/blog/announcements/series-b/) | published 2026-05-28 |
+| $1.3B post-money valuation | [TechCrunch](https://techcrunch.com/2026/05/26/openrouter-more-than-doubles-valuation-to-1-3b-in-a-year/) | 2026-05-26 |
+| Merge Gateway positioning | <https://www.merge.dev/gateway> | observed 2026-07-19 |
+
+Notes on how this ages:
+
+- The **landscape framing** (who routes on what axis, where the decision runs)
+  is from the 2026-06-03 competitive scan and is not re-run on every release.
+  The **figures** above were re-verified against primary sources 2026-07-19.
+- An earlier draft cited "60+ providers"; openrouter.ai now displays 70+. Fixed.
 - The privilege-waiver-by-disclosure framing tracks the regulated-content thesis
   in the OgenticAI vision doc; see [ADR-0001](adr/0001-router-architecture.md)
   for the on-device rationale.
