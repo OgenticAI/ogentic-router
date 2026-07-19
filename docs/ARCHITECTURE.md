@@ -84,10 +84,21 @@ The server reads its config path from the `ROUTER_CONFIG` environment variable
 `0.0.0.0` prints a loud warning, because the local adapters' loopback guarantee
 assumes the server itself isn't exposed off-box.
 
+## Audit emission
+
+`Router.route()` emits one shape-only `RouteDecisionAudit` row per call via the
+configured `audit_sink` (default `NoopSink`), including on error paths. Sinks:
+`NoopSink` (drop), `LocalFileSink` (JSON-lines, fsync + file-lock), and
+`OgenticAuditSink` (forward-compat for the HMAC-chained `ogentic-audit` log).
+Emission is fire-and-forget — a sink failure is logged at WARNING and swallowed;
+routing already happened. Rows carry a `prompt_hash`, never raw text. See the
+[Audit](../README.md#audit) section and `src/ogentic_router/audit/`.
+
 ## What is not wired yet
 
-- **Audit emission** — the Router does not write an `ogentic-audit` log today.
-  `RouteDecision.to_dict()` gives the record shape; automatic emission is v0.2
-  (OGE-584). `GET /v1/decision/{id}` is a stub until then.
+- **HMAC-chained audit** — `OgenticAuditSink` raises at construction until
+  `ogentic-audit` publishes to PyPI. Local-file and Noop sinks work today.
+- **Server decision lookup** — `GET /v1/decision/{id}` is a stub; per-request
+  server-side audit + lookup lands with the server's v0.2 Shield pipeline.
 - **MCP tool surface** — the `[mcp]` extra reserves the dependency, but no MCP
   server or `router.classify_route` tool ships in v0.1 (planned as OGE-586).

@@ -3,6 +3,17 @@
 All notable changes to ogentic-router will be documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+- Audit integration (OGE-584): `Router` emits one shape-only
+  `RouteDecisionAudit` row per `route()` call — sensitivity score, category
+  labels, chosen backend, HMAC `request_id`, `prompt_hash` — never the raw
+  prompt, error paths included. Sinks: `NoopSink` (default), `LocalFileSink`
+  (JSON-lines, fsync + cross-platform file lock), `OgenticAuditSink`
+  (forward-compat for the HMAC-chained `ogentic-audit` log). Configure via the
+  `audit:` block in `router.yaml`. `filelock` moved into the base install.
+
 ## 0.1.0 — 2026-06-13
 
 First PyPI release. Wave-2 baseline.

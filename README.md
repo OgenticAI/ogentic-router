@@ -40,7 +40,7 @@ extras:
 | `[local]` | `httpx` | The Ollama / llama.cpp adapters. |
 | `[server]` | `fastapi`, `uvicorn` | The OpenAI-shaped local endpoint-swap server. |
 | `[mcp]` | `mcp` | Reserved for the MCP tool surface (v0.2 — not yet built). |
-| `[audit]` | — | Reserved for `ogentic-audit` emission (v0.2 — stub today). |
+| `[audit]` | — | Reserved for the `ogentic-audit` HMAC-chained sink (until that library ships). Local-file audit needs no extra — see [Audit](#audit). |
 | `[all]` | all of the above | Everything. |
 | `[dev]` | pytest, ruff, mypy, … | Contributing. |
 
@@ -161,6 +161,35 @@ except BudgetCeilingExceeded as e:
 `None` = no enforcement; `0.0` = refuse all (dry-run); `> 0` = raise if the
 estimate exceeds it. The estimate is input tokens only (~4 chars/token).
 
+## Audit
+
+Every `route()` call emits one **shape-only** decision row — a fingerprint of
+the prompt, the sensitivity score, category labels, and the chosen backend,
+**never the raw prompt text**. The default sink drops rows; opt into a local
+JSON-lines log (no extra needed):
+
+```python
+from ogentic_router import Router
+from ogentic_router.audit import LocalFileSink
+
+router = Router.from_config({
+    "policy_path": "examples/policy.yaml",
+    "audit": {"sink": "local_file", "path": "~/.ogentic-router/audit.jsonl"},
+})
+router.route("Privileged attorney-client memo …")
+# audit.jsonl gains one line:
+# {"ts": "...", "request_id": "<hmac>", "prompt_hash": "sha256:…",
+#  "sensitivity_score": 87, "route_decision": "ollama-local",
+#  "rule_id": "privilege-stays-local", "backend_is_local": true, "error": null, ...}
+```
+
+Rows are emitted on **error paths too** (`error` carries the exception class name
+only). Emission is fire-and-forget — a full or misconfigured log never crashes
+the router. Set `OGENTIC_ROUTER_AUDIT_SALT` for reproducible `request_id`s across
+restarts. The `OgenticAuditSink` (HMAC-chained, tamper-evident) lights up once
+`ogentic-audit` publishes. Replay a log with
+[`examples/audit_replay.py`](examples/audit_replay.py).
+
 ## Privacy invariants
 
 The load-bearing guarantees (full version:
@@ -175,7 +204,7 @@ The load-bearing guarantees (full version:
 - **Fail-closed.** Classifier/policy failures refuse the call; sensitive content
   can never resolve to a cloud backend against the policy.
 - **Shape-only audit.** Decision records carry hashes and labels, never raw
-  prompt text.
+  prompt text — one row per `route()`, error paths included. See [Audit](#audit).
 
 ## How we compare
 
@@ -226,8 +255,8 @@ can't. Sourcing and per-product notes: [docs/COMPARISON.md](docs/COMPARISON.md).
 
 ## What's next (v0.2)
 
-Per-request Shield pipeline in the server + `ogentic-audit` emission
-([OGE-584](https://linear.app/ogenticai/issue/OGE-584)), the MCP tool surface
+Per-request Shield pipeline in the server, the `OgenticAuditSink` (HMAC-chained,
+once `ogentic-audit` ships), the MCP tool surface
 ([OGE-586](https://linear.app/ogenticai/issue/OGE-586)), and a drop-in proxy
 demo. Track the [Linear project](https://linear.app/ogenticai/project/ogentic-router-oss-46e612b52d27).
 

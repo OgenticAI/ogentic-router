@@ -49,13 +49,13 @@ than "it was disclosed and then deleted." The long-form comparison is in
    operator explicitly extends the allowlist via environment variable. A
    caller-supplied URL cannot redirect a cloud call to an arbitrary endpoint.
 
-6. **Shape-only audit.** The decision record carries the sensitivity score,
-   category labels, chosen backend, whether redaction was applied, and a
-   `sha256:`-prefixed hash of the input — **never the raw prompt text**. The
-   audit answers "what was decided" without itself becoming a copy of the
-   sensitive content. (Automatic emission to the HMAC-chained `ogentic-audit`
-   log ships in v0.2; the record shape is stable today via
-   `RouteDecision.to_dict()`.)
+6. **Shape-only audit.** Every `route()` call emits one decision record —
+   sensitivity score, category labels, chosen backend, whether redaction was
+   applied, and a `sha256:`-prefixed hash of the input — **never the raw prompt
+   text**, and on error paths only the exception class name. The audit answers
+   "what was decided" without itself becoming a copy of the sensitive content.
+   A local JSON-lines sink ships today; the HMAC-*chained*, tamper-evident
+   `ogentic-audit` sink lights up once that library publishes.
 
 7. **Fail-closed.** If the classifier is unavailable the router raises rather
    than silently proceeding, and the policy engine refuses to emit a cloud

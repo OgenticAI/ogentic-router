@@ -30,16 +30,27 @@ evaluate in one call). Both share the same Shield instance.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 import yaml
 
+from .audit import AuditSink, NoopSink, RouteDecisionAudit, sink_from_config
+from .audit._request_id import compute_request_id, resolve_salt
+from .audit.sinks import safe_emit
 from .classification import ShieldClassification
 from .cost import estimate_cost
 from .errors import BudgetCeilingExceeded, RouterError, ShieldUnavailableError
 from .policy import Policy, RouteDecision
+
+# Backend-id substrings that indicate an on-device backend, used as a fallback
+# when the config doesn't declare its backends explicitly. See
+# ``Router._backend_is_local``.
+_LOCAL_HINTS = ("local", "ollama", "llamacpp", "llama.cpp", "llama-cpp", "mlx")
+_CLOUD_HINTS = ("cloud", "openai", "anthropic", "openrouter", "together")
 
 if TYPE_CHECKING:  # pragma: no cover - import only for type hints
     from ogentic_shield import AnalysisResult
@@ -82,6 +93,19 @@ def _import_shield() -> tuple[type[Any], Callable[[str], str]]:
             "'ogentic-router[shield]'`)."
         ) from exc
     return Shield, text_hash_for
+
+
+def _fingerprint(text: str) -> str:
+    """Return ``sha256:<16 hex>`` — the same shape as Shield's ``text_hash_for``.
+
+    Used only for the pre-classification error path (e.g. a budget-ceiling
+    refusal before Shield runs) so an audit row always carries a shape-only
+    fingerprint, never raw prompt text. The normal path uses the Shield-sourced
+    ``ShieldClassification.text_hash``; this mirrors its format byte-for-byte.
+    """
+    import hashlib
+
+    return f"sha256:{hashlib.sha256(text.encode()).hexdigest()[:16]}"
 
 
 # ─── Internal: shield-result wrapper for the policy protocol ────────────────
@@ -134,9 +158,16 @@ class Router:
     calls. No internal mutation; ``__slots__`` locks the attribute set.
     """
 
-    __slots__ = ("_policy", "_shield")
+    __slots__ = ("_policy", "_shield", "_audit_sink", "_audit_salt", "_local_backends")
 
-    def __init__(self, policy: Policy, shield: _ShieldLike | None = None) -> None:
+    def __init__(
+        self,
+        policy: Policy,
+        shield: _ShieldLike | None = None,
+        *,
+        audit_sink: AuditSink | None = None,
+        local_backends: frozenset[str] | None = None,
+    ) -> None:
         """Construct a Router from a pre-built ``Policy`` and optional Shield.
 
         Args:
@@ -148,9 +179,20 @@ class Router:
                 the cold-start cost is paid on the first request rather
                 than at Router construction. Prefer :meth:`from_config`
                 in production so init cost is paid once at boot.
+            audit_sink: Where per-``route`` decision rows are emitted.
+                Defaults to :class:`~ogentic_router.audit.NoopSink` (drops
+                rows). Emission is fire-and-forget — a sink failure never
+                interrupts routing.
+            local_backends: Backend ids known to be on-device. When a config
+                declares its ``backends`` (with ``kind``), this is populated
+                so ``backend_is_local`` in the audit row is exact; otherwise
+                the Router falls back to a naming heuristic.
         """
         self._policy = policy
         self._shield = shield
+        self._audit_sink: AuditSink = audit_sink if audit_sink is not None else NoopSink()
+        self._audit_salt = resolve_salt()
+        self._local_backends = local_backends
 
     # ── Constructors ────────────────────────────────────────────────────
 
@@ -196,7 +238,28 @@ class Router:
         if "config" in shield_cfg:
             shield_kwargs["config"] = shield_cfg["config"]
         shield = Shield(**shield_kwargs)
-        return cls(policy=policy, shield=cast(_ShieldLike, shield))
+
+        # Audit sink from the optional ``audit:`` block (default: NoopSink).
+        audit_sink = sink_from_config(config.get("audit"))
+
+        # If the config declares backends (server-style), derive the exact
+        # local-backend set so ``backend_is_local`` in audit rows is precise.
+        local_backends: frozenset[str] | None = None
+        backends = config.get("backends")
+        if backends:
+            local_kinds = {"ollama", "llamacpp"}
+            local_backends = frozenset(
+                b["id"]
+                for b in backends
+                if isinstance(b, dict) and b.get("id") and b.get("kind") in local_kinds
+            )
+
+        return cls(
+            policy=policy,
+            shield=cast(_ShieldLike, shield),
+            audit_sink=audit_sink,
+            local_backends=local_backends,
+        )
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Router:
@@ -295,29 +358,57 @@ class Router:
                 estimated cost of sending ``prompt`` to ``model`` exceeds it.
                 The call is never sent to any provider.
         """
-        if budget_ceiling is not None:
-            effective_model = model or "unknown"
-            cost = estimate_cost(effective_model, prompt)
-            if cost > budget_ceiling:
-                raise BudgetCeilingExceeded(
-                    estimated_cost=cost,
-                    ceiling=budget_ceiling,
-                    model=effective_model,
-                )
+        start = time.perf_counter()
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Pre-classification fallback fingerprint (same format as Shield's
+        # text_hash_for) so an error before classify still carries a hash, not
+        # raw text. Overwritten with the Shield-sourced hash once we classify.
+        prompt_hash = _fingerprint(prompt)
+        result: Any = None
+        projection: ShieldClassification | None = None
+        decision: RouteDecision | None = None
+        error: str | None = None
+        try:
+            if budget_ceiling is not None:
+                effective_model = model or "unknown"
+                cost = estimate_cost(effective_model, prompt)
+                if cost > budget_ceiling:
+                    raise BudgetCeilingExceeded(
+                        estimated_cost=cost,
+                        ceiling=budget_ceiling,
+                        model=effective_model,
+                    )
 
-        shield = self._ensure_shield()
-        result = shield.analyze(prompt)
-        projection = self._project(result)
-        # Wrap the projection + raw entities so the Policy's full Protocol
-        # surface is satisfied (entity_count alone isn't enough for
-        # category_in / category_not_in predicates).
-        wrapped = _ClassificationWithEntities(
-            score=projection.score,
-            category_groups_found=projection.category_groups_found,
-            entities=list(getattr(result, "entities", []) or []),
-            top_category=projection.top_category,
-        )
-        return self._policy.evaluate(wrapped)
+            shield = self._ensure_shield()
+            result = shield.analyze(prompt)
+            projection = self._project(result)
+            if projection.text_hash:
+                prompt_hash = projection.text_hash
+            # Wrap the projection + raw entities so the Policy's full Protocol
+            # surface is satisfied (entity_count alone isn't enough for
+            # category_in / category_not_in predicates).
+            wrapped = _ClassificationWithEntities(
+                score=projection.score,
+                category_groups_found=projection.category_groups_found,
+                entities=list(getattr(result, "entities", []) or []),
+                top_category=projection.top_category,
+            )
+            decision = self._policy.evaluate(wrapped)
+            return decision
+        except Exception as exc:
+            error = type(exc).__name__
+            raise
+        finally:
+            latency_ms = (time.perf_counter() - start) * 1000.0
+            self._emit_audit(
+                ts=ts,
+                prompt_hash=prompt_hash,
+                projection=projection,
+                result=result,
+                decision=decision,
+                error=error,
+                latency_ms=latency_ms,
+            )
 
     # ── Internals ───────────────────────────────────────────────────────
 
@@ -327,6 +418,63 @@ class Router:
             Shield, _text_hash_for = _import_shield()
             self._shield = cast(_ShieldLike, Shield())
         return self._shield
+
+    def _backend_is_local(self, backend_id: str | None) -> bool | None:
+        """Best-effort: is ``backend_id`` an on-device backend?
+
+        When the config declared its ``backends`` (with ``kind``), locality is
+        exact via ``self._local_backends``. Otherwise fall back to a naming
+        heuristic (``ollama-local`` → local, ``openai-cloud`` → cloud). Returns
+        ``None`` when neither the declared set nor the heuristic can decide, so
+        the audit row never asserts a locality it didn't actually determine.
+        """
+        if backend_id is None:
+            return None
+        if self._local_backends is not None:
+            return backend_id in self._local_backends
+        lowered = backend_id.lower()
+        if any(h in lowered for h in _LOCAL_HINTS):
+            return True
+        if any(h in lowered for h in _CLOUD_HINTS):
+            return False
+        return None
+
+    def _emit_audit(
+        self,
+        *,
+        ts: str,
+        prompt_hash: str,
+        projection: ShieldClassification | None,
+        result: Any,
+        decision: RouteDecision | None,
+        error: str | None,
+        latency_ms: float,
+    ) -> None:
+        """Build one :class:`RouteDecisionAudit` row and emit it (never raises).
+
+        Called from :meth:`route`'s ``finally`` so it runs on both success and
+        error paths. Emission goes through :func:`safe_emit`, so a sink failure
+        is logged and swallowed — routing already happened.
+        """
+        profile_ids = getattr(result, "profile_ids", None)
+        profile = profile_ids[0] if profile_ids else None
+        transform = decision.transform.value if decision and decision.transform else None
+        row = RouteDecisionAudit(
+            ts=ts,
+            request_id=compute_request_id(self._audit_salt, ts, prompt_hash),
+            prompt_hash=prompt_hash,
+            sensitivity_score=projection.score if projection else None,
+            profile=profile,
+            top_category=projection.top_category if projection else None,
+            groups_found=sorted(projection.category_groups_found) if projection else [],
+            route_decision=decision.backend_id if decision else None,
+            rule_id=decision.rule_id if decision else None,
+            transform=transform,
+            backend_is_local=self._backend_is_local(decision.backend_id if decision else None),
+            latency_ms=round(latency_ms, 4),
+            error=error,
+        )
+        safe_emit(self._audit_sink, row)
 
     @staticmethod
     def _project(result: Any) -> ShieldClassification:
