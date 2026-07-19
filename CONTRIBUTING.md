@@ -49,7 +49,14 @@ Closes [OGE-XXX](https://linear.app/ogenticai/issue/OGE-XXX).
 - [ ] Item 2 ...
 ```
 
-Commit style: plain conventional commits (`feat:`, `fix:`, `docs:`, `chore:`). No Claude/Anthropic co-author trailers.
+`.github/PULL_REQUEST_TEMPLATE.md` pre-fills this shape — including the privacy-invariant checklist below.
+
+Commit style: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `build:`, `ci:`, `revert:`), scoped to the ticket where there is one — `feat(OGE-XXX): …`. The allowed types and a 100-character header limit are declared in [`.commitlintrc.json`](.commitlintrc.json); enforcement lands with the CI pipeline ticket. No Claude/Anthropic co-author trailers.
+
+## Conduct and security
+
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — Contributor Covenant v2.1; reports to conduct@ogenticai.com.
+- [`SECURITY.md`](SECURITY.md) — **do not file security findings as public issues.** Email security@ogenticai.com. Anything that lets sensitive content reach a network backend is priority-zero.
 
 ## Privacy invariants (load-bearing — don't violate)
 
