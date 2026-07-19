@@ -39,7 +39,7 @@ extras:
 | `[cloud]` | `openai`, `anthropic`, `httpx` | The OpenAI / Anthropic adapters. |
 | `[local]` | `httpx` | The Ollama / llama.cpp adapters. |
 | `[server]` | `fastapi`, `uvicorn` | The OpenAI-shaped local endpoint-swap server. |
-| `[mcp]` | `mcp` | Reserved for the MCP tool surface (v0.2 — not yet built). |
+| `[mcp]` | `mcp` | The MCP tool surface (`serve --mcp`). See [MCP](#mcp). |
 | `[audit]` | — | Reserved for the `ogentic-audit` HMAC-chained sink (until that library ships). Local-file audit needs no extra — see [Audit](#audit). |
 | `[all]` | all of the above | Everything. |
 | `[dev]` | pytest, ruff, mypy, … | Contributing. |
@@ -190,6 +190,42 @@ restarts. The `OgenticAuditSink` (HMAC-chained, tamper-evident) lights up once
 `ogentic-audit` publishes. Replay a log with
 [`examples/audit_replay.py`](examples/audit_replay.py).
 
+## MCP
+
+Expose the router to Claude Desktop / Goose / Cursor / Sotto as an MCP server —
+so an assistant can ask *"if I sent this prompt, which backend would handle it,
+and why?"* **without firing the LLM call**.
+
+```bash
+pip install "ogentic-router[shield,mcp]"
+ogentic-router serve --mcp --config examples/router.yaml   # stdio MCP server
+```
+
+Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "ogentic-router": {
+      "command": "ogentic-router",
+      "args": ["serve", "--mcp", "--config", "/path/to/router.yaml"]
+    }
+  }
+}
+```
+
+Four tools, all shape-only (outputs carry a `prompt_hash`, never the raw prompt):
+
+| Tool | Input | Returns |
+|---|---|---|
+| `router.classify_route` | `prompt` | `backend_id`, `rule_id`, `transform`, `reasoning`, `prompt_hash` |
+| `router.policies` | — | the loaded rules + `default_backend` |
+| `router.adapters` | — | declared backends: `backend_id`, `is_local`, `default_model` |
+| `router.evaluate_dry` | `prompt`, `include_outgoing_prompt=false` | same as `classify_route`, plus the post-redaction `outgoing_prompt` **only** on opt-in. The adapter is never called. |
+
+`include_outgoing_prompt=true` returns cleared prompt content (e.g. after
+`shield_redact`) and logs a WARNING — off by default.
+
 ## Privacy invariants
 
 The load-bearing guarantees (full version:
@@ -256,9 +292,8 @@ can't. Sourcing and per-product notes: [docs/COMPARISON.md](docs/COMPARISON.md).
 ## What's next (v0.2)
 
 Per-request Shield pipeline in the server, the `OgenticAuditSink` (HMAC-chained,
-once `ogentic-audit` ships), the MCP tool surface
-([OGE-586](https://linear.app/ogenticai/issue/OGE-586)), and a drop-in proxy
-demo. Track the [Linear project](https://linear.app/ogenticai/project/ogentic-router-oss-46e612b52d27).
+once `ogentic-audit` ships), and a drop-in proxy demo. Track the
+[Linear project](https://linear.app/ogenticai/project/ogentic-router-oss-46e612b52d27).
 
 ## License
 

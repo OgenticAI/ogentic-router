@@ -158,7 +158,14 @@ class Router:
     calls. No internal mutation; ``__slots__`` locks the attribute set.
     """
 
-    __slots__ = ("_policy", "_shield", "_audit_sink", "_audit_salt", "_local_backends")
+    __slots__ = (
+        "_policy",
+        "_shield",
+        "_audit_sink",
+        "_audit_salt",
+        "_local_backends",
+        "_backends",
+    )
 
     def __init__(
         self,
@@ -167,6 +174,7 @@ class Router:
         *,
         audit_sink: AuditSink | None = None,
         local_backends: frozenset[str] | None = None,
+        backends: list[dict[str, Any]] | None = None,
     ) -> None:
         """Construct a Router from a pre-built ``Policy`` and optional Shield.
 
@@ -186,12 +194,22 @@ class Router:
             local_backends: Backend ids known to be on-device. When a config
                 declares its ``backends`` (with ``kind``), this is populated
                 so ``backend_is_local`` in the audit row is exact; otherwise
-                the Router falls back to a naming heuristic.
+                the Router falls back to a naming heuristic. Derived from
+                ``backends`` when that is given and this is not.
+            backends: Optional descriptors of the declared backends —
+                ``{"backend_id", "is_local", "default_model"}`` each — surfaced
+                by the MCP ``router.adapters`` tool and used to make
+                ``backend_is_local`` exact.
         """
         self._policy = policy
         self._shield = shield
         self._audit_sink: AuditSink = audit_sink if audit_sink is not None else NoopSink()
         self._audit_salt = resolve_salt()
+        self._backends: tuple[dict[str, Any], ...] = tuple(backends) if backends else ()
+        if local_backends is None and self._backends:
+            local_backends = frozenset(
+                b["backend_id"] for b in self._backends if b.get("is_local")
+            )
         self._local_backends = local_backends
 
     # ── Constructors ────────────────────────────────────────────────────
@@ -242,23 +260,25 @@ class Router:
         # Audit sink from the optional ``audit:`` block (default: NoopSink).
         audit_sink = sink_from_config(config.get("audit"))
 
-        # If the config declares backends (server-style), derive the exact
-        # local-backend set so ``backend_is_local`` in audit rows is precise.
-        local_backends: frozenset[str] | None = None
-        backends = config.get("backends")
-        if backends:
-            local_kinds = {"ollama", "llamacpp"}
-            local_backends = frozenset(
-                b["id"]
-                for b in backends
-                if isinstance(b, dict) and b.get("id") and b.get("kind") in local_kinds
-            )
+        # If the config declares backends (server-style), build descriptors so
+        # ``backend_is_local`` is exact and the MCP router.adapters tool can list
+        # them. ``kind`` in {ollama, llamacpp} → on-device.
+        local_kinds = {"ollama", "llamacpp"}
+        backend_descriptors: list[dict[str, Any]] = [
+            {
+                "backend_id": b["id"],
+                "is_local": b.get("kind") in local_kinds,
+                "default_model": b.get("default_model"),
+            }
+            for b in (config.get("backends") or [])
+            if isinstance(b, dict) and b.get("id")
+        ]
 
         return cls(
             policy=policy,
             shield=cast(_ShieldLike, shield),
             audit_sink=audit_sink,
-            local_backends=local_backends,
+            backends=backend_descriptors or None,
         )
 
     @classmethod
@@ -307,6 +327,13 @@ class Router:
     def policy(self) -> Policy:
         """The loaded :class:`~ogentic_router.Policy`. Read-only."""
         return self._policy
+
+    @property
+    def backends(self) -> tuple[dict[str, Any], ...]:
+        """Declared backend descriptors (``backend_id``, ``is_local``,
+        ``default_model``). Empty when the config didn't declare ``backends``.
+        Surfaced by the MCP ``router.adapters`` tool."""
+        return self._backends
 
     # ── Request-path methods ────────────────────────────────────────────
 
