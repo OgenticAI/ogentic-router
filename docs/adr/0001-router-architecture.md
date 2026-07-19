@@ -1,7 +1,7 @@
 # ADR-0001 — ogentic-router architecture: on-device, sensitivity-aware LLM routing
 
-- **Status:** Proposed
-- **Date:** 2026-07-04
+- **Status:** Accepted (2026-07-19)
+- **Date:** 2026-07-04 (drafted)
 - **Deciders:** David (CTO), primitives owner
 - **Kind:** OSS library (Apache-2.0), Python ≥ 3.10
 - **Related:** ecosystem review R-10 (ship the port layer, sequence primitives behind it) · [`ogentic-shield`](https://github.com/OgenticAI/ogentic-shield) · `ogentic-audit` · `ogentic-adapter-sdk` · [`@ogenticai/agent-core`](https://github.com/OgenticAI/agent-core) Route port · Decisions Log #2 (no vendor lock-in), #6 (Shield+Audit on every call), #8 (private/local as the differentiator)
