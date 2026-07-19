@@ -119,10 +119,14 @@ def _build_adapters(config: RouterConfig) -> dict[str, Any]:
                 kwargs["base_url"] = backend.base_url
             adapters[backend.id] = AnthropicAdapter(**kwargs)
 
+        # Local adapters name the address ``endpoint``, not ``base_url`` (the
+        # config schema uses one key for every backend kind). Translate, or the
+        # server dies at startup with a TypeError the moment a local backend is
+        # configured.
         elif backend.kind == "ollama":
             kwargs = {"backend_id": backend.id}
             if backend.base_url:
-                kwargs["base_url"] = backend.base_url
+                kwargs["endpoint"] = backend.base_url
             if backend.default_model:
                 kwargs["default_model"] = backend.default_model
             adapters[backend.id] = OllamaAdapter(**kwargs)
@@ -130,7 +134,7 @@ def _build_adapters(config: RouterConfig) -> dict[str, Any]:
         elif backend.kind == "llamacpp":
             kwargs = {"backend_id": backend.id}
             if backend.base_url:
-                kwargs["base_url"] = backend.base_url
+                kwargs["endpoint"] = backend.base_url
             if backend.default_model:
                 kwargs["default_model"] = backend.default_model
             adapters[backend.id] = LlamaCppAdapter(**kwargs)
