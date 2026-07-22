@@ -15,6 +15,14 @@
 version: 1
 default_backend: ollama-local
 
+# Per-call cost ceiling. Enforcement is ON by default (OGE-1120) — even without
+# this block, every route() is capped at $1.00/call estimated cost. Shown here
+# explicitly for documentation; tune ceiling_usd per engagement, or set
+# `enforce: false` to opt this deployment out entirely.
+budget:
+  enforce: true
+  ceiling_usd: 1.00
+
 rules:
   - id: "privilege-stays-local"
     when:

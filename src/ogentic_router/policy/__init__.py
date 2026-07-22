@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from .decision import RouteDecision
 from .errors import PolicyError
-from .models import Transform
+from .models import BudgetSpec, Transform
 from .policy import Policy
 
-__all__ = ["Policy", "RouteDecision", "Transform", "PolicyError"]
+__all__ = ["BudgetSpec", "Policy", "RouteDecision", "Transform", "PolicyError"]

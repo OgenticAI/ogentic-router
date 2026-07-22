@@ -5,6 +5,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+- **Budget-ceiling enforcement is now ON by default** (OGE-1120). The policy DSL
+  gains a `budget` block (`enforce: true`, `ceiling_usd: 1.00` by default); a
+  policy with no block still enforces a $1.00/call estimated-cost ceiling. Opt
+  out per engagement with `budget: {enforce: false}`. `Router.route` reads the
+  policy budget when no explicit `budget_ceiling` is passed; an explicit argument
+  still overrides (a number for that call, `None` to disable for that call). The
+  default is generous — a normal prompt estimates well under a cent — so it
+  guards fat-finger / runaway calls without biting real usage.
+
 ### Added
 - MCP tool surface (OGE-586): `ogentic-router serve --mcp` boots a stdio MCP
   server with four shape-only tools — `router.classify_route`, `router.policies`,

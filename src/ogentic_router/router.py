@@ -33,6 +33,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
@@ -51,6 +52,16 @@ from .policy import Policy, RouteDecision
 # ``Router._backend_is_local``.
 _LOCAL_HINTS = ("local", "ollama", "llamacpp", "llama.cpp", "llama-cpp", "mlx")
 _CLOUD_HINTS = ("cloud", "openai", "anthropic", "openrouter", "together")
+
+
+class _Unset(Enum):
+    """Sentinel so ``route(budget_ceiling=None)`` (disable enforcement for this
+    call) is distinguishable from ``route()`` (use the policy's budget)."""
+
+    UNSET = 0
+
+
+_UNSET = _Unset.UNSET
 
 if TYPE_CHECKING:  # pragma: no cover - import only for type hints
     from ogentic_shield import AnalysisResult
@@ -358,7 +369,7 @@ class Router:
         prompt: str,
         *,
         model: str | None = None,
-        budget_ceiling: float | None = None,
+        budget_ceiling: float | None | _Unset = _UNSET,
     ) -> RouteDecision:
         """Classify ``prompt`` and run it through the loaded Policy.
 
@@ -368,23 +379,38 @@ class Router:
         fire against entities that aren't surfaced on the user-facing
         :class:`ShieldClassification` projection.
 
+        **Budget enforcement is ON by default** (OGE-1120). When
+        ``budget_ceiling`` is not passed, the ceiling comes from the loaded
+        policy's ``budget`` block (default: enforce at
+        ``$1.00``/call). Opt out per engagement with ``budget: {enforce: false}``
+        in the policy, or per call by passing ``budget_ceiling=None``.
+
         Args:
             prompt: The prompt text to route.
             model: Optional model identifier used for budget estimation
-                (e.g. ``"gpt-4-turbo"``, ``"opus-4"``).  Required when
-                ``budget_ceiling`` is set; ignored otherwise.
-            budget_ceiling: Optional maximum estimated USD cost for this call.
-                ``None`` (default) — no enforcement, current behaviour.
-                ``0.0`` — refuse all calls (dry-run mode).
-                ``> 0`` — raise :class:`~ogentic_router.BudgetCeilingExceeded`
-                if the estimated input-token cost exceeds this value.
-                The check runs **before** any Shield analysis or network call.
+                (e.g. ``"gpt-4-turbo"``, ``"opus-4"``). Defaults to
+                ``"unknown"`` (a conservative price) when a ceiling applies.
+            budget_ceiling: Per-call maximum estimated USD cost.
+                *Omitted* (default) — use the policy's budget block (ON by
+                default). ``None`` — disable enforcement for this call.
+                ``0.0`` — refuse all calls (dry-run). ``> 0`` — override the
+                policy ceiling for this call. When enforcement is active and
+                the estimated input-token cost exceeds the ceiling,
+                :class:`~ogentic_router.BudgetCeilingExceeded` is raised
+                **before** any Shield analysis or network call.
 
         Raises:
-            BudgetCeilingExceeded: if ``budget_ceiling`` is set and the
-                estimated cost of sending ``prompt`` to ``model`` exceeds it.
-                The call is never sent to any provider.
+            BudgetCeilingExceeded: if an active ceiling is exceeded by the
+                estimated cost of sending ``prompt`` to ``model``. The call is
+                never sent to any provider.
         """
+        # Resolve the effective ceiling: an explicit kwarg (a float, or None to
+        # disable) always wins; otherwise fall back to the policy's budget,
+        # which enforces by default.
+        if isinstance(budget_ceiling, _Unset):
+            effective_ceiling = self._policy.effective_ceiling()
+        else:
+            effective_ceiling = budget_ceiling
         start = time.perf_counter()
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         # Pre-classification fallback fingerprint (same format as Shield's
@@ -396,13 +422,13 @@ class Router:
         decision: RouteDecision | None = None
         error: str | None = None
         try:
-            if budget_ceiling is not None:
+            if effective_ceiling is not None:
                 effective_model = model or "unknown"
                 cost = estimate_cost(effective_model, prompt)
-                if cost > budget_ceiling:
+                if cost > effective_ceiling:
                     raise BudgetCeilingExceeded(
                         estimated_cost=cost,
-                        ceiling=budget_ceiling,
+                        ceiling=effective_ceiling,
                         model=effective_model,
                     )
 

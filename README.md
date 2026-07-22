@@ -145,21 +145,37 @@ All implement one async method — `chat(messages, *, model=None, max_tokens=Non
 
 ## Budget ceiling (fail-fast cost control)
 
-`route(..., budget_ceiling=<USD>)` (and `--budget-ceiling` on the CLI) checks the
-estimated input-token cost **before** the call leaves the device — no partial
-sends.
+Cost enforcement is **ON by default**. Every `route()` checks the estimated
+input-token cost **before** the call leaves the device — no partial sends — against
+the policy's `budget` block, which defaults to a **$1.00/call** ceiling even when a
+policy declares no budget. The default is generous (a normal prompt estimates at
+fractions of a cent); it catches fat-finger and runaway calls.
+
+Set it per engagement in the policy:
+
+```yaml
+budget:
+  enforce: true       # ON by default; false opts this deployment out entirely
+  ceiling_usd: 0.50   # per-call estimated-USD cap
+```
+
+Override or disable per call:
 
 ```python
 from ogentic_router import Router, BudgetCeilingExceeded
 
 try:
-    decision = router.route(prompt, model="gpt-4o-mini", budget_ceiling=0.001)
+    decision = router.route(prompt)                       # uses the policy budget (on)
+    decision = router.route(prompt, budget_ceiling=0.001) # override for this call
+    decision = router.route(prompt, budget_ceiling=None)  # disable for this call
 except BudgetCeilingExceeded as e:
     print(f"blocked: est ${e.estimated_cost:.6g} > ceiling ${e.ceiling}")
 ```
 
-`None` = no enforcement; `0.0` = refuse all (dry-run); `> 0` = raise if the
-estimate exceeds it. The estimate is input tokens only (~4 chars/token).
+Precedence: an explicit `budget_ceiling=` wins for that call (`0.0` = refuse all /
+dry-run; `None` = disable); otherwise the policy's `budget` applies. The estimate
+is input tokens only (~4 chars/token). Full reference:
+[docs/POLICY_REFERENCE.md](docs/POLICY_REFERENCE.md#budget).
 
 ## Audit
 

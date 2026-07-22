@@ -19,6 +19,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Default per-call estimated-USD ceiling when a policy declares no explicit one.
+# Generous by design: a normal prompt estimates well under a cent, so this never
+# bites real usage — it's a fat-finger / runaway guard. Tune down per engagement.
+DEFAULT_CEILING_USD: float = 1.0
+
 
 class Transform(str, Enum):
     """Pre-flight transforms applied to a prompt before it crosses to the chosen backend.
@@ -103,6 +108,36 @@ class RuleSpec(BaseModel):
     transform: Transform | None = None
 
 
+class BudgetSpec(BaseModel):
+    """Per-engagement cost ceiling for the policy.
+
+    **Enforcement is ON by default** (CTO standing order, OGE-1120): a policy
+    with no ``budget:`` block still enforces at :data:`DEFAULT_CEILING_USD`.
+    The ceiling is a *per-call* estimated-USD cap — the router estimates the
+    input cost of a prompt before it leaves the device and refuses the call if
+    the estimate exceeds the ceiling (:class:`~ogentic_router.BudgetCeilingExceeded`).
+
+    Opt out **per engagement** by setting ``enforce: false`` in that
+    deployment's policy — the intended, explicit escape hatch.
+
+    ```yaml
+    budget:
+      enforce: true        # default; set false to opt this engagement out
+      ceiling_usd: 1.00     # default; per-call estimated-cost cap
+    ```
+
+    The default ceiling is deliberately generous — a single normal prompt
+    estimates at fractions of a cent, so the default never bites real usage;
+    it catches fat-finger / runaway mega-prompts and misconfigured batch jobs.
+    Tune it down per engagement for tighter control.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enforce: bool = True
+    ceiling_usd: float = Field(default=DEFAULT_CEILING_USD, gt=0)
+
+
 class PolicySpec(BaseModel):
     """The serialised form of a policy file.
 
@@ -117,6 +152,7 @@ class PolicySpec(BaseModel):
     version: Literal[1]
     default_backend: str = Field(min_length=1)
     rules: list[RuleSpec] = Field(default_factory=list)
+    budget: BudgetSpec = Field(default_factory=BudgetSpec)
 
 
-__all__ = ["PolicySpec", "RuleSpec", "WhenClause", "Transform"]
+__all__ = ["BudgetSpec", "PolicySpec", "RuleSpec", "WhenClause", "Transform"]

@@ -15,6 +15,34 @@ fails loudly at load time rather than silently widening a rule.
 | `version` | integer | yes | Must be exactly `1`. |
 | `default_backend` | string | yes | Non-empty. Fires when no rule matches. |
 | `rules` | list of rules | no | Defaults to `[]` (every prompt → `default_backend`). |
+| `budget` | mapping | no | Per-call cost ceiling. **Enforcement is ON by default** — see [Budget](#budget). |
+
+## Budget
+
+Cost enforcement is **on by default**: a policy with no `budget:` block still
+enforces a per-call estimated-cost ceiling of **$1.00**. The router estimates the
+input cost of a prompt *before* it leaves the device and raises
+`BudgetCeilingExceeded` if the estimate exceeds the ceiling — no partial send.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enforce` | bool | `true` | Set `false` to **opt this engagement out** entirely. |
+| `ceiling_usd` | number > 0 | `1.00` | Per-call estimated-USD cap. |
+
+```yaml
+budget:
+  enforce: true       # ON by default; false opts this deployment out
+  ceiling_usd: 0.50   # tune per engagement
+```
+
+The default ceiling is deliberately generous — a single normal prompt estimates
+at fractions of a cent, so the default never bites real usage; it catches
+fat-finger / runaway mega-prompts and misconfigured batch jobs. Tune it down per
+engagement for tighter control.
+
+Precedence at call time (`Router.route`): an explicit `budget_ceiling=` argument
+wins for that call (a number overrides the policy ceiling; `None` disables
+enforcement for that one call); otherwise the policy's `budget` applies.
 
 ## Rule fields
 

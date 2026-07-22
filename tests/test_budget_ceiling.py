@@ -121,7 +121,9 @@ def test_budget_ceiling_exceeded_message_includes_values() -> None:
 
 
 def test_route_no_ceiling_passes_through(canonical_policy: Policy) -> None:
-    """Case: budget_ceiling=None (default) — no enforcement, existing behaviour."""
+    """Case: no explicit ceiling — the policy's default budget applies (ON by
+    default, OGE-1120) but a normal prompt is far under the $1.00 default, so
+    routing proceeds. Confirms the on-by-default guard doesn't bite real usage."""
     shield = _TrackingShield()
     router = Router(policy=canonical_policy, shield=shield)
     result = router.route("some prompt")
