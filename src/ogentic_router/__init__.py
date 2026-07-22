@@ -11,7 +11,12 @@ and the project README for details.
 from __future__ import annotations
 
 from ogentic_router.classification import ShieldClassification
-from ogentic_router.errors import BudgetCeilingExceeded, RouterError, ShieldUnavailableError
+from ogentic_router.errors import (
+    BudgetCeilingExceeded,
+    CloudRouteDeniedError,
+    RouterError,
+    ShieldUnavailableError,
+)
 from ogentic_router.policy import Policy, PolicyError, RouteDecision, Transform
 from ogentic_router.router import Router
 
@@ -19,6 +24,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "BudgetCeilingExceeded",
+    "CloudRouteDeniedError",
     "Policy",
     "PolicyError",
     "RouteDecision",

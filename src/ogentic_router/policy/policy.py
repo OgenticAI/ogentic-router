@@ -24,6 +24,7 @@ from .decision import RouteDecision
 from .errors import PolicyError
 from .models import (
     BudgetSpec,
+    DenyCloudSpec,
     PolicySpec,
     RuleSpec,
     Transform,  # noqa: F401 — re-exported via __all__ for ``from ogentic_router.policy import Transform``
@@ -164,6 +165,23 @@ class Policy:
         when the caller doesn't pass an explicit ``budget_ceiling``.
         """
         return self._spec.budget.ceiling_usd if self._spec.budget.enforce else None
+
+    @property
+    def deny_cloud(self) -> DenyCloudSpec:
+        """The fail-closed cloud-deny guarantee (enforcement ON by default)."""
+        return self._spec.deny_cloud
+
+    def denied_groups(self) -> frozenset[str]:
+        """Category groups that must never resolve to a cloud backend.
+
+        Returns the configured group set when ``deny_cloud.enforce`` is true
+        (the default: privilege / PHI / MNPI), else an empty set. This is what
+        :meth:`Router.route` consults to fail closed on a cloud-bound decision
+        for regulated content.
+        """
+        if not self._spec.deny_cloud.enforce:
+            return frozenset()
+        return frozenset(self._spec.deny_cloud.groups)
 
     def evaluate(self, shield_result: Any) -> RouteDecision:
         """Pick a backend for ``shield_result`` per the loaded rules.

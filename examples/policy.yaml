@@ -23,6 +23,15 @@ budget:
   enforce: true
   ceiling_usd: 1.00
 
+# Fail-closed guarantee (OGE-1135): content Shield flags as privilege / PHI /
+# MNPI can never resolve to a cloud backend, even if a rule below is wrong or
+# reordered — the router refuses (CloudRouteDeniedError) before any dispatch.
+# ON by default; shown explicitly here. Opt out with `enforce: false`, or narrow
+# `groups` (e.g. drop PHI to send de-identified PHI to cloud on purpose).
+deny_cloud:
+  enforce: true
+  groups: [PRIVILEGE, PHI, MNPI]
+
 rules:
   - id: "privilege-stays-local"
     when:

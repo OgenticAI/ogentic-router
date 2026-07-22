@@ -108,8 +108,33 @@ class BudgetCeilingExceeded(RouterError):
         )
 
 
+class CloudRouteDeniedError(RouterError):
+    """Raised when regulated content would be routed to a non-local backend.
+
+    The fail-closed core of the privacy promise (OGE-1135). When a prompt is
+    classified into one of the policy's ``deny_cloud`` groups (default:
+    privilege / PHI / MNPI) and the chosen backend is not on-device, the router
+    refuses the decision **before** any dispatch — a misconfigured or mis-ordered
+    policy can never leak regulated content to the cloud.
+
+    Attributes:
+        groups: The denied category groups present on the prompt.
+        backend_id: The cloud backend the policy would have routed to.
+    """
+
+    def __init__(self, groups: list[str], backend_id: str) -> None:
+        self.groups = groups
+        self.backend_id = backend_id
+        super().__init__(
+            f"CloudRouteDeniedError: content in {groups} must stay local, but the "
+            f"policy routed it to non-local backend {backend_id!r}. Route these "
+            "groups to a local backend, or opt out with deny_cloud.enforce=false."
+        )
+
+
 __all__ = [
     "BudgetCeilingExceeded",
+    "CloudRouteDeniedError",
     "ConfigError",
     "RouterError",
     "ServerError",
