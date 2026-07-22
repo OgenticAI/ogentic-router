@@ -189,45 +189,66 @@ def test_no_shield_analyze_when_ceiling_exceeded(canonical_policy: Policy) -> No
 
 
 # ─── CLI: route subcommand — 3 ceiling cases ─────────────────────────────────
+#
+# The `route` CLI now runs the full pipeline (OGE-585), so it takes a --policy
+# and classifies via Shield. These use the canonical policy with a stubbed
+# Shield (no Presidio cold-start); the ceiling-exceeded / zero cases refuse
+# *before* classification, so Shield is never touched there anyway.
 
 
-def test_cli_route_ceiling_exceeded_exits_nonzero() -> None:
+@pytest.fixture()
+def _cli_stub_shield(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "ogentic_router.router._import_shield",
+        lambda: (
+            lambda **_kw: SimpleNamespace(analyze=lambda _t: _fake_analysis_result()),
+            lambda t: "sha256:cli",
+        ),
+    )
+
+
+def test_cli_route_ceiling_exceeded_exits_nonzero(_cli_stub_shield: None) -> None:
     """AC: CLI exits non-zero with BudgetCeilingExceeded on stderr."""
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["route", "--model", "gpt-4-turbo", "--prompt", "hello", "--budget-ceiling", "0.000001"],
+        ["route", "--policy", str(CANONICAL_POLICY_PATH), "--model", "gpt-4-turbo",
+         "--prompt", "hello", "--budget-ceiling", "0.000001"],
     )
     assert result.exit_code != 0
-    assert "BudgetCeilingExceeded" in (result.output + (result.stderr if hasattr(result, "stderr") else ""))
+    assert "BudgetCeilingExceeded" in result.output
 
 
-def test_cli_route_ceiling_not_exceeded_exits_zero() -> None:
+def test_cli_route_ceiling_not_exceeded_exits_zero(_cli_stub_shield: None) -> None:
     """AC: CLI proceeds normally when cost is within ceiling."""
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["route", "--model", "gpt-4-turbo", "--prompt", "hi", "--budget-ceiling", "100.0"],
+        ["route", "--policy", str(CANONICAL_POLICY_PATH), "--model", "gpt-4-turbo",
+         "--prompt", "hi", "--budget-ceiling", "100.0"],
     )
     assert result.exit_code == 0
 
 
-def test_cli_route_ceiling_zero_refuses() -> None:
+def test_cli_route_ceiling_zero_refuses(_cli_stub_shield: None) -> None:
     """AC: CLI dry-run mode (--budget-ceiling 0) refuses all calls."""
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["route", "--model", "opus-4", "--prompt", "hi", "--budget-ceiling", "0"],
+        ["route", "--policy", str(CANONICAL_POLICY_PATH), "--model", "opus-4",
+         "--prompt", "hi", "--budget-ceiling", "0"],
     )
     assert result.exit_code != 0
-    assert "BudgetCeilingExceeded" in (result.output + (result.stderr if hasattr(result, "stderr") else ""))
+    assert "BudgetCeilingExceeded" in result.output
 
 
-def test_cli_route_no_ceiling_succeeds() -> None:
-    """CLI route without --budget-ceiling succeeds (no enforcement)."""
+def test_cli_route_no_explicit_ceiling_succeeds_under_default(_cli_stub_shield: None) -> None:
+    """Without --budget-ceiling, the policy budget (ON by default, $1.00) applies;
+    a tiny prompt estimates well under it and succeeds."""
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["route", "--model", "gpt-4-turbo", "--prompt", "hello"],
+        ["route", "--policy", str(CANONICAL_POLICY_PATH), "--model", "gpt-4-turbo",
+         "--prompt", "hello"],
     )
     assert result.exit_code == 0

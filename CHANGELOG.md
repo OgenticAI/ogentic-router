@@ -16,6 +16,14 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   guards fat-finger / runaway calls without biting real usage.
 
 ### Added
+- CLI subcommands (OGE-585): `route` now runs the full pipeline — Shield + policy
+  — and prints the `RouteDecision` (JSON or `--output text`), reading the prompt
+  from `--prompt` or stdin; `--execute` also dispatches to the chosen backend and
+  prints the model output. New `policies` group: `validate` (exit 0/2), `show`
+  (Rich rule table), and `dry-run` (decision only, never calls an adapter). All
+  router-backed subcommands honor `$ROUTER_CONFIG` (and `$OGENTIC_ROUTER_CONFIG`)
+  as the default config path. Adapter construction is centralized in
+  `adapters/factory.build_adapter`, shared by the server and CLI.
 - MCP tool surface (OGE-586): `ogentic-router serve --mcp` boots a stdio MCP
   server with four shape-only tools — `router.classify_route`, `router.policies`,
   `router.adapters`, `router.evaluate_dry` (adapter never called;

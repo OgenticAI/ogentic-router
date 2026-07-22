@@ -101,6 +101,34 @@ Verify what the router will do by reading the loaded policy at
 > `Router` makes the full per-prompt decision today. See
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## CLI
+
+The `ogentic-router` command has three subcommands. Every subcommand that needs a
+router accepts `--config <router.yaml>` or `--policy <policy.yaml>`, falling back
+to `$ROUTER_CONFIG`.
+
+```bash
+# Route one prompt through the pipeline; print the decision (JSON by default)
+ogentic-router route --policy examples/policy.yaml --prompt "attorney work product"
+echo "what's the weather" | ogentic-router route --config router.yaml --output text
+
+# --execute also dispatches to the chosen backend and prints the model output
+# (needs a --config that declares backends). Budget enforcement is ON by default.
+ogentic-router route --config router.yaml --prompt "summarize this" --execute
+
+# Inspect / validate a policy — no server, no model call
+ogentic-router policies validate examples/policy.yaml   # exit 0 ok, 2 on error
+ogentic-router policies show     examples/policy.yaml   # pretty rule table
+ogentic-router policies dry-run  examples/policy.yaml --prompt "..."  # decision only
+
+# Boot the server (HTTP, or the stdio MCP surface with --mcp)
+ogentic-router serve --config router.yaml --port 8080
+```
+
+`route` runs Shield + policy and returns the **decision**; `--execute` adds the
+dispatch. `policies dry-run` is the safe "what would happen" inspector — it never
+calls a backend.
+
 ## Policy DSL
 
 Policies are YAML, first-match-wins. Full reference:
