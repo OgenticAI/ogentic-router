@@ -89,56 +89,17 @@ def _build_adapters(config: RouterConfig) -> dict[str, Any]:
 
     Returns an empty dict when no backends are configured (test mode).
     """
-    from ogentic_router.adapters.anthropic_adapter import AnthropicAdapter  # noqa: PLC0415
-    from ogentic_router.adapters.llamacpp_adapter import LlamaCppAdapter  # noqa: PLC0415
-    from ogentic_router.adapters.ollama_adapter import OllamaAdapter  # noqa: PLC0415
-    from ogentic_router.adapters.openai_adapter import OpenAIAdapter  # noqa: PLC0415
+    from ogentic_router.adapters.factory import build_adapter  # noqa: PLC0415
 
     adapters: dict[str, Any] = {}
     for backend in config.backends:
-        api_key = resolve_api_key(backend)
-        if backend.kind == "openai":
-            kwargs: dict[str, Any] = {
-                "api_key": api_key or "",
-                "backend_id": backend.id,
-            }
-            if backend.default_model:
-                kwargs["default_model"] = backend.default_model
-            if backend.base_url:
-                kwargs["base_url"] = backend.base_url
-            adapters[backend.id] = OpenAIAdapter(**kwargs)
-
-        elif backend.kind == "anthropic":
-            kwargs = {
-                "api_key": api_key or "",
-                "backend_id": backend.id,
-            }
-            if backend.default_model:
-                kwargs["default_model"] = backend.default_model
-            if backend.base_url:
-                kwargs["base_url"] = backend.base_url
-            adapters[backend.id] = AnthropicAdapter(**kwargs)
-
-        # Local adapters name the address ``endpoint``, not ``base_url`` (the
-        # config schema uses one key for every backend kind). Translate, or the
-        # server dies at startup with a TypeError the moment a local backend is
-        # configured.
-        elif backend.kind == "ollama":
-            kwargs = {"backend_id": backend.id}
-            if backend.base_url:
-                kwargs["endpoint"] = backend.base_url
-            if backend.default_model:
-                kwargs["default_model"] = backend.default_model
-            adapters[backend.id] = OllamaAdapter(**kwargs)
-
-        elif backend.kind == "llamacpp":
-            kwargs = {"backend_id": backend.id}
-            if backend.base_url:
-                kwargs["endpoint"] = backend.base_url
-            if backend.default_model:
-                kwargs["default_model"] = backend.default_model
-            adapters[backend.id] = LlamaCppAdapter(**kwargs)
-
+        adapters[backend.id] = build_adapter(
+            kind=backend.kind,
+            backend_id=backend.id,
+            base_url=backend.base_url,
+            default_model=backend.default_model,
+            api_key=resolve_api_key(backend),
+        )
     return adapters
 
 
