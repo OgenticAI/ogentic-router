@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from .decision import RouteDecision
 from .errors import PolicyError
 from .models import (
+    BudgetSpec,
     PolicySpec,
     RuleSpec,
     Transform,  # noqa: F401 — re-exported via __all__ for ``from ogentic_router.policy import Transform``
@@ -149,6 +150,20 @@ class Policy:
         policy's internal state.
         """
         return tuple(self._spec.rules)
+
+    @property
+    def budget(self) -> BudgetSpec:
+        """The policy's per-call cost ceiling (enforcement ON by default)."""
+        return self._spec.budget
+
+    def effective_ceiling(self) -> float | None:
+        """The per-call USD ceiling to enforce, or ``None`` if opted out.
+
+        Returns ``budget.ceiling_usd`` when ``budget.enforce`` is true (the
+        default), else ``None``. This is what :meth:`Router.route` consults
+        when the caller doesn't pass an explicit ``budget_ceiling``.
+        """
+        return self._spec.budget.ceiling_usd if self._spec.budget.enforce else None
 
     def evaluate(self, shield_result: Any) -> RouteDecision:
         """Pick a backend for ``shield_result`` per the loaded rules.
