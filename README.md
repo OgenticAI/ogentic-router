@@ -327,6 +327,14 @@ We don't compete on breadth; we answer the regulated-content question they
 structurally can't. Full sourcing table and per-product notes:
 [docs/COMPARISON.md](docs/COMPARISON.md).
 
+## Demo
+
+[`demo/`](demo/) — a small Streamlit app that shows the router classifying a
+prompt and choosing a backend across all four adapter kinds (llama.cpp, Ollama,
+Anthropic, OpenAI), on-device, before anything is sent. Run it with
+`streamlit run demo/app.py` (see [`demo/README.md`](demo/README.md)); deploys to
+Railway via the bundled `Dockerfile` + `railway.json`.
+
 ## Examples & docs
 
 - [`examples/route_string.py`](examples/route_string.py) — route one prompt, print the decision

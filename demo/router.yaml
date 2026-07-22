@@ -1,0 +1,29 @@
+# Demo router config — declares the four backends the policy routes across so
+# the router knows which are on-device (kind: ollama|llamacpp) vs cloud.
+# The demo never dispatches to these, so the endpoints/keys are illustrative.
+version: 1
+policy_path: policy.yaml
+
+# Activate all three regulated-domain profiles so the demo detects legal
+# privilege, healthcare PHI, and finance MNPI (the default set is legal+therapy).
+shield:
+  profiles: [shield-legal, shield-therapy, shield-finance]
+
+backends:
+  - id: llamacpp-local
+    kind: llamacpp
+    base_url: http://localhost:8080
+    default_model: Llama-3.1-8B-Instruct-Q4
+
+  - id: ollama-local
+    kind: ollama
+    base_url: http://localhost:11434
+    default_model: llama3.2:3b
+
+  - id: openai-cloud
+    kind: openai
+    default_model: gpt-4o-mini
+
+  - id: anthropic-cloud
+    kind: anthropic
+    default_model: claude-sonnet-4-5
