@@ -281,8 +281,11 @@ The load-bearing guarantees (full version:
 - **Decision before dispatch.** The `RouteDecision` exists before any content is
   sent.
 - **Local means local.** Local adapters reject any non-loopback host.
-- **Fail-closed.** Classifier/policy failures refuse the call; sensitive content
-  can never resolve to a cloud backend against the policy.
+- **Fail-closed.** Classifier/policy failures refuse the call. And content Shield
+  flags as privilege / PHI / MNPI **can never resolve to a cloud backend** — the
+  router raises `CloudRouteDeniedError` before dispatch even if a rule is
+  misconfigured or mis-ordered. ON by default; see the [`deny_cloud`](docs/POLICY_REFERENCE.md#deny-cloud)
+  policy block.
 - **Shape-only audit.** Decision records carry hashes and labels, never raw
   prompt text — one row per `route()`, error paths included. See [Audit](#audit).
 

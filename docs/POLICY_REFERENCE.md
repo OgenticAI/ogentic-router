@@ -16,6 +16,7 @@ fails loudly at load time rather than silently widening a rule.
 | `default_backend` | string | yes | Non-empty. Fires when no rule matches. |
 | `rules` | list of rules | no | Defaults to `[]` (every prompt → `default_backend`). |
 | `budget` | mapping | no | Per-call cost ceiling. **Enforcement is ON by default** — see [Budget](#budget). |
+| `deny_cloud` | mapping | no | Fail-closed: regulated groups never go cloud. **ON by default** — see [Deny cloud](#deny-cloud). |
 
 ## Budget
 
@@ -43,6 +44,39 @@ engagement for tighter control.
 Precedence at call time (`Router.route`): an explicit `budget_ceiling=` argument
 wins for that call (a number overrides the policy ceiling; `None` disables
 enforcement for that one call); otherwise the policy's `budget` applies.
+
+## Deny cloud
+
+The fail-closed core of the privacy promise. Content Shield flags as one of the
+denied groups (default **privilege / PHI / MNPI**) can **never** resolve to a
+cloud backend — even if a rule routes it there, or the rule list is mis-ordered.
+The router raises `CloudRouteDeniedError` **before** any dispatch. **On by
+default**: a policy with no `deny_cloud` block still enforces it.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enforce` | bool | `true` | Set `false` to **opt this deployment out** entirely. |
+| `groups` | list of groups | `[PRIVILEGE, PHI, MNPI]` | The groups that must stay local. Validated against `ogentic_shield.CategoryGroup`. |
+
+```yaml
+deny_cloud:
+  enforce: true                     # ON by default; false opts out
+  groups: [PRIVILEGE, PHI, MNPI]    # narrow to allow, e.g., de-identified PHI to cloud
+```
+
+This is a **backstop, not the routing** — a correct policy already routes these
+groups to a local backend, so the guard never fires in normal operation. It
+exists to turn a misconfiguration (a rule sending PHI to cloud) into a loud
+error instead of a silent leak. It also beats `transform: shield_redact` — a
+denied group can't go to cloud even redacted; narrow `groups` if your deployment
+intends to send de-identified data outward.
+
+**Locality:** the router decides "is this backend local?" from the config's
+declared `backends` (`kind: ollama|llamacpp` → local) when present — authoritative,
+so a regulated group routed to an *undeclared* backend is also denied. With no
+declared backends (policy-only / `policies dry-run`), it falls back to a naming
+heuristic and allows an unclassifiable backend with a WARNING rather than
+breaking inspection. Declare your backends for the strongest guarantee.
 
 ## Rule fields
 

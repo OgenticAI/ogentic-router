@@ -24,6 +24,39 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # bites real usage — it's a fat-finger / runaway guard. Tune down per engagement.
 DEFAULT_CEILING_USD: float = 1.0
 
+# Category groups that must never resolve to a cloud backend by default — the
+# fail-closed core of the privacy promise (OGE-1135). Enforcement is ON by
+# default; the router refuses to dispatch content in any of these groups to a
+# non-local backend, even if a rule (or a mis-ordered failover) would send it
+# there. Legal privilege, protected health information, material non-public info.
+DEFAULT_DENY_CLOUD_GROUPS: tuple[str, ...] = ("PRIVILEGE", "PHI", "MNPI")
+
+
+def _check_group_names(value: list[str] | None) -> list[str] | None:
+    """Reject unknown category-group names with a 'did you mean …?' hint.
+
+    Pins the valid set to ``ogentic_shield.CategoryGroup`` at validation time —
+    when Shield adds a new group the router accepts it with no code change. If
+    Shield isn't installed the import fails loudly here, which is the right
+    failure mode for a Shield-coupled DSL. Shared by every group-valued field.
+    """
+    if value is None:
+        return value
+    from ogentic_shield import CategoryGroup  # noqa: PLC0415 — lazy by design
+
+    valid = {g.value for g in CategoryGroup}
+    unknown = [name for name in value if name not in valid]
+    if unknown:
+        from ._suggestions import suggest  # noqa: PLC0415
+
+        hint = suggest(unknown[0], valid)
+        msg = f"Unknown category group {unknown[0]!r}"
+        if hint is not None:
+            msg += f". Did you mean {hint!r}?"
+        msg += f" Known groups: {', '.join(sorted(valid))}"
+        raise ValueError(msg)
+    return value
+
 
 class Transform(str, Enum):
     """Pre-flight transforms applied to a prompt before it crosses to the chosen backend.
@@ -69,30 +102,7 @@ class WhenClause(BaseModel):
     @field_validator("groups_include", "groups_exclude")
     @classmethod
     def _validate_groups_against_shield(cls, value: list[str] | None) -> list[str] | None:
-        """Reject unknown category-group names with a 'did you mean ...?' hint.
-
-        Pins the valid set to ``ogentic_shield.CategoryGroup`` at validation
-        time — when Shield adds a new group, the router accepts it
-        immediately without any code change. If Shield isn't installed at
-        all the import fails loudly here, which is exactly the right
-        failure mode for a Shield-coupled DSL.
-        """
-        if value is None:
-            return value
-        from ogentic_shield import CategoryGroup  # noqa: PLC0415 — lazy by design
-
-        valid = {g.value for g in CategoryGroup}
-        unknown = [name for name in value if name not in valid]
-        if unknown:
-            from ._suggestions import suggest  # noqa: PLC0415
-
-            hint = suggest(unknown[0], valid)
-            msg = f"Unknown category group {unknown[0]!r}"
-            if hint is not None:
-                msg += f". Did you mean {hint!r}?"
-            msg += f" Known groups: {', '.join(sorted(valid))}"
-            raise ValueError(msg)
-        return value
+        return _check_group_names(value)
 
 
 class RuleSpec(BaseModel):
@@ -138,6 +148,43 @@ class BudgetSpec(BaseModel):
     ceiling_usd: float = Field(default=DEFAULT_CEILING_USD, gt=0)
 
 
+class DenyCloudSpec(BaseModel):
+    """Fail-closed guarantee: named category groups never resolve to cloud.
+
+    **Enforcement is ON by default** (OGE-1135), which is the whole product
+    thesis — content flagged as privilege / PHI / MNPI must never leave the
+    device, even if a rule (or a mis-ordered failover) would route it to a cloud
+    backend. The router treats a decision that sends a denied group to a
+    non-local backend as a policy violation and raises
+    :class:`~ogentic_router.CloudRouteDeniedError` **before** any dispatch.
+
+    ```yaml
+    deny_cloud:
+      enforce: true                    # default; set false to opt out entirely
+      groups: [PRIVILEGE, PHI, MNPI]    # default; the groups that must stay local
+    ```
+
+    This is a **backstop, not the routing itself** — a correct policy already
+    routes these groups to a local backend, so the guard never fires in normal
+    operation. It exists to catch misconfiguration (a rule that sends PHI to
+    cloud, a reordered rule list) loudly instead of leaking silently.
+
+    Opt out per engagement with ``enforce: false``, or narrow ``groups`` (e.g.
+    drop ``PHI`` if your deployment routes de-identified PHI to cloud on
+    purpose). Group names are validated against ``ogentic_shield.CategoryGroup``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enforce: bool = True
+    groups: list[str] = Field(default_factory=lambda: list(DEFAULT_DENY_CLOUD_GROUPS))
+
+    @field_validator("groups")
+    @classmethod
+    def _validate_groups(cls, value: list[str]) -> list[str]:
+        return _check_group_names(value) or []
+
+
 class PolicySpec(BaseModel):
     """The serialised form of a policy file.
 
@@ -153,6 +200,7 @@ class PolicySpec(BaseModel):
     default_backend: str = Field(min_length=1)
     rules: list[RuleSpec] = Field(default_factory=list)
     budget: BudgetSpec = Field(default_factory=BudgetSpec)
+    deny_cloud: DenyCloudSpec = Field(default_factory=DenyCloudSpec)
 
 
-__all__ = ["BudgetSpec", "PolicySpec", "RuleSpec", "WhenClause", "Transform"]
+__all__ = ["BudgetSpec", "DenyCloudSpec", "PolicySpec", "RuleSpec", "WhenClause", "Transform"]

@@ -5,6 +5,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+- Fail-closed **deny-cloud** guarantee (OGE-1135): content Shield flags as
+  privilege / PHI / MNPI can never resolve to a cloud backend — the router raises
+  `CloudRouteDeniedError` before any dispatch, even if a rule is misconfigured or
+  mis-ordered. New policy DSL `deny_cloud` block (`enforce: true`,
+  `groups: [PRIVILEGE, PHI, MNPI]` by default); **ON by default**, opt out with
+  `enforce: false` or narrow `groups`. Beats `shield_redact` (denied groups can't
+  go cloud even redacted). Locality is authoritative when the config declares its
+  backends. The denial is recorded in the shape-only audit row.
+
 ### Changed
 - **Budget-ceiling enforcement is now ON by default** (OGE-1120). The policy DSL
   gains a `budget` block (`enforce: true`, `ceiling_usd: 1.00` by default); a

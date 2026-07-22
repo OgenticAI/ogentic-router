@@ -30,6 +30,7 @@ evaluate in one call). Both share the same Shield instance.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -44,8 +45,15 @@ from .audit._request_id import compute_request_id, resolve_salt
 from .audit.sinks import safe_emit
 from .classification import ShieldClassification
 from .cost import estimate_cost
-from .errors import BudgetCeilingExceeded, RouterError, ShieldUnavailableError
+from .errors import (
+    BudgetCeilingExceeded,
+    CloudRouteDeniedError,
+    RouterError,
+    ShieldUnavailableError,
+)
 from .policy import Policy, RouteDecision
+
+logger = logging.getLogger("ogentic_router")
 
 # Backend-id substrings that indicate an on-device backend, used as a fallback
 # when the config doesn't declare its backends explicitly. See
@@ -447,6 +455,7 @@ class Router:
                 top_category=projection.top_category,
             )
             decision = self._policy.evaluate(wrapped)
+            self._enforce_deny_cloud(decision, projection.category_groups_found)
             return decision
         except Exception as exc:
             error = type(exc).__name__
@@ -471,6 +480,41 @@ class Router:
             Shield, _text_hash_for = _import_shield()
             self._shield = cast(_ShieldLike, Shield())
         return self._shield
+
+    def _enforce_deny_cloud(
+        self, decision: RouteDecision, groups_found: frozenset[str]
+    ) -> None:
+        """Fail closed: refuse a cloud-bound decision for regulated content (OGE-1135).
+
+        If the prompt carries any of the policy's ``deny_cloud`` groups (default
+        privilege / PHI / MNPI) and the chosen backend is not on-device, raise
+        :class:`CloudRouteDeniedError` — before any dispatch. A correct policy
+        routes these groups local, so this never fires in normal operation; it's
+        the backstop against a misconfigured or mis-ordered policy.
+
+        Locality: when the config declares its backends, ``backend_is_local`` is
+        authoritative and an *undeterminable* backend for regulated content is
+        also denied (fail closed). With no declared backends (policy-only /
+        dry-run), a backend the naming heuristic can't classify is allowed with
+        a WARNING rather than breaking inspection.
+        """
+        denied = self._policy.denied_groups()
+        if not denied:
+            return
+        hit = sorted(groups_found & denied)
+        if not hit:
+            return
+        is_local = self._backend_is_local(decision.backend_id)
+        if is_local is True:
+            return
+        if is_local is False or self._backends:
+            raise CloudRouteDeniedError(groups=hit, backend_id=decision.backend_id)
+        logger.warning(
+            "cannot confirm backend %r is local for denied groups %s — allowing. "
+            "Declare backends in the config for authoritative fail-closed enforcement.",
+            decision.backend_id,
+            hit,
+        )
 
     def _backend_is_local(self, backend_id: str | None) -> bool | None:
         """Best-effort: is ``backend_id`` an on-device backend?
