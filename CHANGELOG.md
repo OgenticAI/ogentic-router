@@ -5,6 +5,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+- Live demo surface (OGE-1578): a Streamlit app under `demo/` that classifies a
+  prompt with Shield and shows the routing decision across all four adapter kinds
+  (llama.cpp / Ollama / Anthropic / OpenAI) — on-device, no LLM call. UI-free core
+  (`demo/router_demo.py`) is unit-tested; ships a `Dockerfile` + `railway.json` for
+  Railway deploy.
+
 ### Changed
 - **Budget-ceiling enforcement is now ON by default** (OGE-1120). The policy DSL
   gains a `budget` block (`enforce: true`, `ceiling_usd: 1.00` by default); a
