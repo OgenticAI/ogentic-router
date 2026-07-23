@@ -14,11 +14,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `enforce: false` or narrow `groups`. Beats `shield_redact` (denied groups can't
   go cloud even redacted). Locality is authoritative when the config declares its
   backends. The denial is recorded in the shape-only audit row.
-- Live demo surface (OGE-1578): a Streamlit app under `demo/` that classifies a
-  prompt with Shield and shows the routing decision across all four adapter kinds
-  (llama.cpp / Ollama / Anthropic / OpenAI) — on-device, no LLM call. UI-free core
-  (`demo/router_demo.py`) is unit-tested; ships a `Dockerfile` + `railway.json` for
-  Railway deploy.
+- Live demo surface (OGE-1578): a Streamlit app that classifies a prompt with
+  Shield and shows the routing decision across all four adapter kinds
+  (llama.cpp / Ollama / Anthropic / OpenAI) — on-device, no LLM call. Lives in its
+  own repo, [OgenticAI/router-streamlit-demo](https://github.com/OgenticAI/router-streamlit-demo),
+  to keep the demo image and deploy config out of the library.
 
 ### Changed
 - **Budget-ceiling enforcement is now ON by default** (OGE-1120). The policy DSL

@@ -332,11 +332,12 @@ structurally can't. Full sourcing table and per-product notes:
 
 ## Demo
 
-[`demo/`](demo/) — a small Streamlit app that shows the router classifying a
-prompt and choosing a backend across all four adapter kinds (llama.cpp, Ollama,
-Anthropic, OpenAI), on-device, before anything is sent. Run it with
-`streamlit run demo/app.py` (see [`demo/README.md`](demo/README.md)); deploys to
-Railway via the bundled `Dockerfile` + `railway.json`.
+[**OgenticAI/router-streamlit-demo**](https://github.com/OgenticAI/router-streamlit-demo)
+— a small Streamlit app that shows the router classifying a prompt and choosing a
+backend across all four adapter kinds (llama.cpp, Ollama, Anthropic, OpenAI),
+on-device, before anything is sent. Lives in its own repo (mirrors
+[`shield-streamlit-demo`](https://github.com/OgenticAI/shield-streamlit-demo)) so
+the demo image and deploy config stay out of the library.
 
 ## Examples & docs
 
