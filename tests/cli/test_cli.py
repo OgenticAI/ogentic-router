@@ -185,3 +185,105 @@ def test_route_execute_backend_not_in_config_exits_2(
     )
     assert result.exit_code == 2
     assert "does not declare" in result.output
+
+
+# ── route --classification ───────────────────────────────────────────────────
+
+SHIELD_FIXTURE = Path(__file__).parent.parent / "fixtures" / "shield_0.6.1_analysis.json"
+
+
+@pytest.fixture()
+def no_shield_analyze(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail the test if anything calls Shield.analyze."""
+    from tests.cli import conftest
+
+    def _boom(self: Any, text: str) -> Any:
+        raise AssertionError("Shield.analyze must not run with --classification")
+
+    monkeypatch.setattr(conftest._StubShield, "analyze", _boom)
+
+
+@pytest.mark.usefixtures("no_shield_analyze")
+def test_route_classification_file(runner: CliRunner, policy_file: Path) -> None:
+    result = runner.invoke(
+        cli, ["route", "--policy", str(policy_file), "--classification", str(SHIELD_FIXTURE)]
+    )
+    assert result.exit_code == 0, result.output
+    out = json.loads(result.output)
+    assert set(out) == {"backend_id", "rule_id", "transform", "reasoning"}
+    assert out["backend_id"] == "ollama-local"
+    assert out["rule_id"] == "privilege-stays-local"
+
+
+@pytest.mark.usefixtures("no_shield_analyze")
+def test_route_classification_stdin_with_config(runner: CliRunner, router_config: Path) -> None:
+    result = runner.invoke(
+        cli,
+        ["route", "--config", str(router_config), "--classification", "-", "--output", "text"],
+        input=SHIELD_FIXTURE.read_text(encoding="utf-8"),
+    )
+    assert result.exit_code == 0, result.output
+    assert "backend:   ollama-local" in result.output
+
+
+def test_route_classification_matches_route_on_same_analysis(
+    runner: CliRunner, policy_file: Path
+) -> None:
+    """The CLI's --classification decision equals the prompt path's when the
+    (stubbed) Shield returns the same analysis."""
+    from tests.cli import conftest
+    from tests.test_route_analysis import SAMPLE, _doc, _shield_result
+
+    analysis = _shield_result(_doc())
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(conftest._StubShield, "analyze", lambda self, text: analysis)
+        via_prompt = runner.invoke(cli, ["route", "--policy", str(policy_file)], input=SAMPLE)
+    via_json = runner.invoke(
+        cli, ["route", "--policy", str(policy_file), "--classification", str(SHIELD_FIXTURE)]
+    )
+    assert via_prompt.exit_code == via_json.exit_code == 0
+    assert json.loads(via_json.output) == json.loads(via_prompt.output)
+
+
+@pytest.mark.parametrize(
+    ("payload", "needle"),
+    [
+        ("not json", "not valid JSON"),
+        ("[]", "JSON object"),
+        ('{"entities": []}', "score"),
+        ('{"score": 50, "entities": [{"category": "X", "category_group": "NOPE"}]}',
+         "Unknown category group"),
+    ],
+)
+def test_route_classification_malformed_exits_2(
+    runner: CliRunner, policy_file: Path, payload: str, needle: str
+) -> None:
+    result = runner.invoke(
+        cli, ["route", "--policy", str(policy_file), "--classification", "-"], input=payload
+    )
+    assert result.exit_code == 2
+    assert needle in result.output
+
+
+@pytest.mark.parametrize(
+    "extra", [["--prompt", "hi"], ["--execute"], ["--budget-ceiling", "0.5"], ["--model", "x"]]
+)
+def test_route_classification_rejects_prompt_only_flags(
+    runner: CliRunner, policy_file: Path, extra: list[str]
+) -> None:
+    result = runner.invoke(
+        cli,
+        ["route", "--policy", str(policy_file), "--classification", str(SHIELD_FIXTURE), *extra],
+    )
+    assert result.exit_code == 2
+    assert "cannot be combined" in result.output
+
+
+def test_route_classification_cloud_denied_exits_1(runner: CliRunner, tmp_path: Path) -> None:
+    policy = tmp_path / "cloud.yaml"
+    policy.write_text("version: 1\ndefault_backend: openai-cloud\n", encoding="utf-8")
+    result = runner.invoke(
+        cli, ["route", "--policy", str(policy), "--classification", str(SHIELD_FIXTURE)]
+    )
+    assert result.exit_code == 1
+    assert "CloudRouteDeniedError" in result.output

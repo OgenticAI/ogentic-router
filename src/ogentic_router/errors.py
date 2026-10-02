@@ -132,8 +132,17 @@ class CloudRouteDeniedError(RouterError):
         )
 
 
+class ClassificationError(RouterError, ValueError):
+    """Raised when a supplied Shield analysis document is malformed.
+
+    Used by :func:`~ogentic_router.classification.analysis_from_json` (the
+    ``route --classification`` path). The message names the offending field.
+    """
+
+
 __all__ = [
     "BudgetCeilingExceeded",
+    "ClassificationError",
     "CloudRouteDeniedError",
     "ConfigError",
     "RouterError",

@@ -3,7 +3,7 @@
 `ogentic-router` decides **where a prompt is allowed to go before it leaves the
 device**, based on the *sensitivity* of the content. The full design rationale
 is in [ADR-0001](adr/0001-router-architecture.md); this page is the operational
-"where does data actually flow" explainer, matched to what v0.1 ships.
+"where does data actually flow" explainer, matched to what 0.2.0 ships.
 
 ## The four-step pipeline
 
@@ -30,7 +30,7 @@ is in [ADR-0001](adr/0001-router-architecture.md); this page is the operational
 Steps 1–3 always run locally. Only step 4, and only for a non-local backend,
 crosses the network — and only with content the policy has cleared or redacted.
 
-## Where the boundary is drawn in v0.1
+## Where the boundary is drawn in 0.2.0
 
 The library and the server sit at different points on the road to the full
 pipeline. Be precise about which you're using:
@@ -38,8 +38,9 @@ pipeline. Be precise about which you're using:
 | Surface | Classify (1) | Decide (2) | Redact (3) | Dispatch (4) |
 |---|---|---|---|---|
 | **`Router.route(prompt)`** (library) | ✅ Shield | ✅ policy | decision flags it | ✗ returns the decision; you dispatch |
+| **`Router.route_analysis(analysis)`** / `route --classification` | ✗ caller already ran Shield | ✅ policy | decision flags it | ✗ returns the decision; you dispatch |
 | **Adapter `.chat(...)`** | — | — | — | ✅ calls the backend |
-| **Server `POST /v1/chat/completions`** | ✗ v0.2 | routes on `default_backend` | ✗ v0.2 | ✅ |
+| **Server `POST /v1/chat/completions`** | ✗ not yet | routes on `default_backend` | ✗ not yet | ✅ |
 
 Two deliberate design points:
 
@@ -50,11 +51,11 @@ Two deliberate design points:
    byte is sent, and a misconfigured dispatcher can't route sensitive content
    outward against the decision.
 
-2. **The server's per-request Shield pipeline is a v0.2 gap.** In v0.1 the
+2. **The server's per-request Shield pipeline is not built yet.** In 0.2.0 the
    OpenAI-shaped server selects the policy's `default_backend` and dispatches;
    it does not yet classify each request and evaluate the rules per-call. It
    *does* load the policy and expose it at `GET /v1/policy` so you can see the
-   rules that will apply once wired (OGE-584). Until then, use the library
+   rules that will apply once wired. Until then, use the library
    `Router` when you need the actual per-prompt decision.
 
 ## Components
@@ -67,7 +68,7 @@ Two deliberate design points:
 | Cloud allowlist | Cloud adapters accept only `api.openai.com` / `api.anthropic.com` (extendable by env var). | `adapters/_allowlist.py` |
 | Loopback guard | Local adapters accept only `localhost` / `127.0.0.1` / `::1`. Non-loopback raises `LocalhostOnlyError`. | `adapters/_localhost.py` |
 | Server | OpenAI-shaped FastAPI endpoint-swap surface (`[server]` extra). | `server/` |
-| CLI | `ogentic-router serve` and `ogentic-router route`. | `cli/` |
+| CLI | `ogentic-router serve`, `route` (prompt or `--classification`) and `policies validate / show / dry-run`. | `cli/` |
 
 ## Server endpoints (as shipped)
 
@@ -75,9 +76,9 @@ Two deliberate design points:
 |---|---|---|
 | GET | `/healthz` | `{"status": "ok"}`. |
 | GET | `/v1/models` | OpenAI-shaped model list derived from configured backends. |
-| POST | `/v1/chat/completions` | Chat completion; streaming (SSE) and non-streaming. Routes to `default_backend` in v0.1. `503` if started with no config. |
+| POST | `/v1/chat/completions` | Chat completion; streaming (SSE) and non-streaming. Routes to `default_backend` in 0.2.0. `503` if started with no config. |
 | GET | `/v1/policy` | The loaded policy: version, `default_backend`, rule count, rules. `404` if no policy. |
-| GET | `/v1/decision/{id}` | Stub in v0.1 — returns "Decision audit is not available in v0.1 (ogentic-audit integration pending)". |
+| GET | `/v1/decision/{id}` | Stub — returns "Decision lookup is not available yet (ogentic-audit integration pending)". |
 
 The server reads its config path from the `ROUTER_CONFIG` environment variable
 (or an explicit `--config`). Default bind is `127.0.0.1:8080`; binding to
@@ -99,7 +100,7 @@ routing already happened. Rows carry a `prompt_hash`, never raw text. See the
 - **HMAC-chained audit** — `OgenticAuditSink` raises at construction until
   `ogentic-audit` publishes to PyPI. Local-file and Noop sinks work today.
 - **Server decision lookup** — `GET /v1/decision/{id}` is a stub; per-request
-  server-side audit + lookup lands with the server's v0.2 Shield pipeline.
+  server-side audit + lookup lands with the server's per-request Shield pipeline.
 
 ## MCP tool surface
 

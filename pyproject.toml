@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ogentic-router"
-version = "0.1.0"
+version = "0.2.0"
 description = "Privacy-aware LLM routing: sensitive content stays local; redacted content may go to cloud."
 readme = "README.md"
 license = "Apache-2.0"
@@ -63,7 +63,8 @@ server = [
     "httpx>=0.27",
 ]
 # MCP tool surface — router.classify_route etc.
-mcp = ["mcp>=1.0"]
+# Pinned below 2: mcp 2.x renamed FastMCP (the surface this server builds on).
+mcp = ["mcp>=1.0,<2"]
 # ogentic-audit HMAC-chained log integration (OgenticAuditSink). Empty until
 # ogentic-audit publishes to PyPI — the sink lazy-imports it and raises
 # AuditUnavailableError with this extra's install hint until then. LocalFileSink

@@ -38,7 +38,7 @@ sign for the design.
 ## The integration seam
 
 Because nothing is wired, the first real decision is **how** Sotto reaches the
-router. The router is Python; Sotto is Rust/Tauri. Two supported options:
+router. The router is Python; Sotto is Rust/Tauri. Three supported options:
 
 ### Option A — local HTTP (recommended to start)
 
@@ -48,10 +48,10 @@ loopback OpenAI-shaped endpoint (`127.0.0.1:8080/v1/chat/completions`).
 - **Pros:** no Python embedding; the router is a black box behind a stable wire
   format; Sotto can use any HTTP client. Works today — verified end to end
   against a local Ollama backend.
-- **Cons:** a second process to supervise; and in v0.1 the *server* dispatches to
-  the policy's `default_backend` rather than classifying per request (the full
-  Shield→policy pipeline on the server is v0.2). For per-prompt sensitivity
-  routing before v0.2, use Option B or call the MCP surface.
+- **Cons:** a second process to supervise; and in 0.2.0 the *server* dispatches
+  to the policy's `default_backend` rather than classifying per request (the
+  per-request Shield→policy pipeline on the server is not built yet). For
+  per-prompt sensitivity routing, use Option B or C.
 - **Requires:** adding an HTTP dependency and a shell/sidecar capability to
   `capabilities/default.json` — neither is present today.
 
@@ -62,11 +62,36 @@ Sotto spawns `ogentic-router serve --mcp` and calls the tools over stdio:
 post-redaction outgoing text, opt-in), `router.policies`, `router.adapters`.
 
 - **Pros:** gives the **full per-prompt decision today** (the library path, not
-  the v0.1 server shortcut), shape-only by default, and it's the same surface
+  the server's `default_backend` shortcut), shape-only by default, and it's the same surface
   Claude Desktop uses.
 - **Cons:** stdio process management; not a chat-completion path — Sotto still
   dispatches the actual completion itself (which is arguably correct: decide
   here, dispatch there).
+
+### Option C — CLI on Sotto's own Shield result (no second Shield run)
+
+Sotto's documented Shield plan is to subprocess-invoke
+`ogentic-shield analyze --output json` and parse the JSON. It can hand that same
+JSON to the router and get the policy decision without Shield running twice and
+without the router ever seeing the prompt:
+
+```bash
+ogentic-shield analyze --output json < prompt.txt > analysis.json
+ogentic-router route --policy policy.yaml --classification analysis.json
+# or pipe it: ... | ogentic-router route --policy policy.yaml --classification -
+```
+
+Output is the usual decision JSON (`backend_id`, `rule_id`, `transform`,
+`reasoning`). The router reads `score` and each entity's `category` /
+`category_group` (`confidence`, `text_hash` and `profiles_active` are used if
+present); it never reads an entity's matched `text`, so Sotto may strip it
+before handing the document over. Deny-cloud and the audit row still apply. The
+budget ceiling does not (it estimates cost from the prompt text). Malformed JSON
+or an unknown category group exits 2 with the field named; a deny-cloud refusal
+exits 1.
+
+- **Pros:** one Shield run per prompt; the prompt stays inside Sotto.
+- **Cons:** one process spawn per decision; Sotto still dispatches.
 
 Whichever is chosen, the privacy-relevant decision is made **before** any
 dispatch, and the router emits a shape-only audit row per decision.
