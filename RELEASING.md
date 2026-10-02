@@ -1,6 +1,6 @@
 # Releasing ogentic-router
 
-The release process is automated via `.github/workflows/release.yml`. Pushing a tag like `v0.1.1` triggers the workflow which builds the sdist + wheel, runs `twine check`, uploads to PyPI, then smoke-installs from PyPI to confirm.
+The release process is automated via `.github/workflows/release.yml`. Pushing a tag like `v0.2.0` triggers the workflow which builds the sdist + wheel, runs `twine check`, uploads to PyPI, then smoke-installs from PyPI to confirm.
 
 This document is the operator's manual. **It assumes the v0.1.0 first-publish already happened** (see §3 for that one-off). Routine releases after v0.1.0 follow §1.
 
@@ -10,17 +10,23 @@ This document is the operator's manual. **It assumes the v0.1.0 first-publish al
 
 ### Pre-flight (5 min)
 
-1. **Pull main** clean:
+1. **Branch from a clean main** (the bump goes through a PR):
    ```bash
-   git checkout main && git pull --ff-only
+   git checkout main && git pull --ff-only && git checkout -b release/vX.Y.Z
    ```
 
-2. **Bump versions** — *both* must match the tag-without-leading-v:
+2. **Bump versions** — all must match the tag-without-leading-v:
 
    | File | Bump |
    |---|---|
    | `pyproject.toml` (`[project] version = "X.Y.Z"`) | yes |
    | `src/ogentic_router/__init__.py` (`__version__ = "X.Y.Z"`) | yes |
+   | `uv.lock` (the `ogentic-router` package entry) | yes — `uv lock` updates it |
+
+   Everything else (the CLI `--version`, the HTTP server's reported version)
+   reads `__version__`. `tests/test_version.py` fails if `pyproject.toml` and
+   `__init__.py` disagree; the release workflow's smoke step fails if the
+   published version isn't the tag.
 
 3. **Verify** they match each other:
    ```bash
@@ -28,16 +34,19 @@ This document is the operator's manual. **It assumes the v0.1.0 first-publish al
    grep '__version__' src/ogentic_router/__init__.py
    ```
 
-4. **Run the full local pipeline:**
+4. **Changelog:** rename `## X.Y.Z — Unreleased` in `CHANGELOG.md` to
+   `## X.Y.Z — <tag date>`.
+
+5. **Run the full local pipeline** (the same installs CI uses):
    ```bash
-   uv pip install --python .venv/bin/python -e ".[dev]"
+   uv pip install --python .venv/bin/python -e ".[shield,cloud,server,dev]"
    .venv/bin/ruff check src/ tests/
    .venv/bin/mypy src/
    .venv/bin/pytest tests/
    ```
-   All four green or the release doesn't happen.
+   All green or the release doesn't happen.
 
-5. **Build + check locally** (catches everything CI catches, faster):
+6. **Build + check locally** (catches everything CI catches, faster):
    ```bash
    rm -rf dist/
    python -m build
@@ -45,20 +54,30 @@ This document is the operator's manual. **It assumes the v0.1.0 first-publish al
    unzip -l dist/*.whl | grep -E 'tests/|benchmarks/|__pycache__' && echo "FAIL: stowaway in wheel" || echo "OK"
    ```
 
-6. **Smoke install** from the local wheel in a throwaway venv:
+7. **Smoke install** from the local wheel in a throwaway venv, with the
+   `[shield]` extra, and run the README CLI commands from the repo root:
    ```bash
    python -m venv /tmp/pre-release-smoke
-   /tmp/pre-release-smoke/bin/pip install dist/*.whl
-   /tmp/pre-release-smoke/bin/python -c "import ogentic_router; print(ogentic_router.__version__)"
-   rm -rf /tmp/pre-release-smoke
+   /tmp/pre-release-smoke/bin/pip install "$(ls dist/*.whl)[shield]"
+   /tmp/pre-release-smoke/bin/ogentic-router --version
+   PATH=/tmp/pre-release-smoke/bin:$PATH sh -c '
+     echo "attorney work product" | ogentic-router route --policy examples/policy.yaml &&
+     ogentic-router policies validate examples/policy.yaml &&
+     ogentic-router policies show examples/policy.yaml &&
+     echo "attorney work product" | ogentic-router policies dry-run examples/policy.yaml &&
+     echo "attorney work product" | ogentic-shield analyze --output json > /tmp/analysis.json &&
+     ogentic-router route --policy examples/policy.yaml --classification /tmp/analysis.json'
+   rm -rf /tmp/pre-release-smoke /tmp/analysis.json
    ```
+   The first Shield run downloads its spaCy model (several hundred MB).
 
 ### Commit + tag + push
 
+Version bumps land through a normal PR to `main` (branch protection applies).
+Once it has merged:
+
 ```bash
-git add pyproject.toml src/ogentic_router/__init__.py
-git commit -m "chore(release): vX.Y.Z"
-git push
+git checkout main && git pull --ff-only
 
 git tag vX.Y.Z
 git push origin vX.Y.Z
@@ -97,9 +116,10 @@ python -m twine upload --skip-existing dist/*  # NO — don't re-upload to "fix"
 #   3. Cut X.Y.(Z+1) with the fix
 ```
 
-### Update the changelog
+### Changelog
 
-Append release notes to `CHANGELOG.md`. Don't backfill old releases — start from the release that's adding the changelog.
+Release notes go in `CHANGELOG.md` under `## X.Y.Z — Unreleased` as part of
+the bump PR (pre-flight step 4), so they are reviewed with it.
 
 ---
 
@@ -158,7 +178,7 @@ Once v0.1.0 is on PyPI:
    - PyPI project → "Publishing" → "Add a new publisher".
    - Owner: `OgenticAI`, Repository: `ogentic-router`, Workflow filename: `release.yml`, Environment: `pypi`.
    - In `release.yml`, swap `password: ${{ secrets.PYPI_API_TOKEN }}` for nothing (delete the `user`/`password` block), add `permissions: id-token: write` on the `publish` job.
-3. Test on the next release (v0.1.1).
+3. Test on the next release.
 
 ---
 

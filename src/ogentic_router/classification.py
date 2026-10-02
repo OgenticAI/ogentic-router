@@ -30,7 +30,10 @@ the same fingerprint for cross-system forensic linking.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
+
+from .errors import ClassificationError, ShieldUnavailableError
 
 
 @dataclass(frozen=True)
@@ -93,4 +96,84 @@ class ShieldClassification:
         }
 
 
-__all__ = ["ShieldClassification"]
+def analysis_from_json(doc: Any) -> SimpleNamespace:
+    """Rebuild the policy-relevant slice of a Shield analysis from its JSON form.
+
+    ``doc`` is the parsed document ``ogentic-shield analyze --output json``
+    prints (0.6.x): ``score``, ``entities[]`` (each with ``category`` and
+    ``category_group``; ``confidence`` optional), and optionally ``text_hash``
+    and ``profiles_active``. Other keys (``sensitivity_level``,
+    ``routing_suggestion``, ...) are ignored; the policy makes the decision.
+
+    ``category_groups_found`` and ``top_category`` are derived from the entities
+    exactly as Shield's pipeline derives them, so :meth:`Router.route_analysis`
+    reaches the same decision :meth:`Router.route` would for the same analysis.
+    Each entity's matched ``text`` is never read or kept; callers may drop it.
+
+    Raises:
+        ClassificationError: the document is not a well-formed Shield analysis
+            (the message names the field), or names an unknown category group.
+        ShieldUnavailableError: ``ogentic-shield`` is not installed, so group
+            names cannot be checked.
+    """
+    if not isinstance(doc, dict):
+        raise ClassificationError(f"expected a JSON object, got {type(doc).__name__}")
+    score = doc.get("score")
+    if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 100:
+        raise ClassificationError(f"'score' must be an integer 0..100, got {score!r}")
+    raw_entities = doc.get("entities")
+    if not isinstance(raw_entities, list):
+        raise ClassificationError(f"'entities' must be a list, got {raw_entities!r}")
+
+    entities: list[SimpleNamespace] = []
+    for i, raw in enumerate(raw_entities):
+        if not isinstance(raw, dict):
+            raise ClassificationError(f"entities[{i}] must be an object")
+        category, group = raw.get("category"), raw.get("category_group")
+        confidence = raw.get("confidence", 0.0)
+        if not isinstance(category, str) or not category:
+            raise ClassificationError(f"entities[{i}].category must be a non-empty string")
+        if not isinstance(group, str) or not group:
+            raise ClassificationError(f"entities[{i}].category_group must be a non-empty string")
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            raise ClassificationError(f"entities[{i}].confidence must be a number")
+        entities.append(
+            SimpleNamespace(category=category, category_group=group, confidence=float(confidence))
+        )
+
+    groups = frozenset(e.category_group for e in entities)
+    # Fail closed on an unknown group name: a typo like "phi" must not slip
+    # past groups_include / deny_cloud by silently matching nothing.
+    from .policy.models import _check_group_names  # noqa: PLC0415
+
+    try:
+        _check_group_names(sorted(groups))
+    except ImportError as exc:
+        raise ShieldUnavailableError(
+            "ogentic-shield is needed to validate category groups. Install the "
+            "[shield] extra: `pip install 'ogentic-router[shield]'`."
+        ) from exc
+    except ValueError as exc:
+        raise ClassificationError(f"entities: {exc}") from exc
+
+    text_hash = doc.get("text_hash", "")
+    if not isinstance(text_hash, str):
+        raise ClassificationError("'text_hash' must be a string")
+    profiles = doc.get("profiles_active", [])
+    if not isinstance(profiles, list) or not all(isinstance(p, str) for p in profiles):
+        raise ClassificationError("'profiles_active' must be a list of strings")
+
+    # Shield's top_category: the highest-confidence entity, first one on a tie.
+    top = max(entities, key=lambda e: e.confidence) if entities else None
+    return SimpleNamespace(
+        score=score,
+        category_groups_found=groups,
+        entities=entities,
+        top_category=top.category if top else None,
+        entity_count=len(entities),
+        text_hash=text_hash,
+        profile_ids=profiles,
+    )
+
+
+__all__ = ["ShieldClassification", "analysis_from_json"]
