@@ -1,0 +1,55 @@
+{
+  "text_hash": "sha256:21a7c5dfd5ae4aa1",
+  "score": 88,
+  "sensitivity_level": "CRITICAL",
+  "routing_suggestion": "LOCAL_ONLY",
+  "entity_count": 4,
+  "processing_time_ms": 857.3,
+  "layers_invoked": [
+    "REGEX",
+    "NER",
+    "RULES"
+  ],
+  "profiles_active": [
+    "shield-legal",
+    "shield-therapy"
+  ],
+  "entities": [
+    {
+      "text": "ATTORNEY-CLIENT PRIVILEGED",
+      "category": "PRIVILEGE_MARKER",
+      "category_group": "PRIVILEGE",
+      "confidence": 1.0,
+      "detection_layer": "REGEX",
+      "start": 0,
+      "end": 26
+    },
+    {
+      "text": "PRIVILEGED",
+      "category": "PRIVILEGE_MARKER",
+      "category_group": "PRIVILEGE",
+      "confidence": 1.0,
+      "detection_layer": "RULES",
+      "start": 16,
+      "end": 26
+    },
+    {
+      "text": "John Smith",
+      "category": "PERSON",
+      "category_group": "PII",
+      "confidence": 0.85,
+      "detection_layer": "NER",
+      "start": 49,
+      "end": 59
+    },
+    {
+      "text": "SSN 123-45-6789",
+      "category": "SSN",
+      "category_group": "PII",
+      "confidence": 1.0,
+      "detection_layer": "REGEX",
+      "start": 61,
+      "end": 76
+    }
+  ]
+}

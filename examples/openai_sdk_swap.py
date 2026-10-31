@@ -23,12 +23,12 @@ What changed vs. talking to OpenAI directly:
     )
 
 Verifying the routing decision: the server surfaces the loaded policy at
-GET /v1/policy, and (in v0.2) each response will carry the decision id for
+GET /v1/policy, and (in a later release) each response will carry the decision id for
 lookup at GET /v1/decision/{id}. Today that endpoint returns a
 "pending ogentic-audit integration" stub — see docs/ARCHITECTURE.md.
 
-v0.1 caveat: the server dispatches to the policy's `default_backend`; the full
-per-request Shield -> policy selection lands in v0.2 (OGE-584). The library
+0.2.0 caveat: the server dispatches to the policy's `default_backend`; the full
+per-request Shield -> policy selection is not built yet. The library
 Router (examples/route_string.py) already makes the full decision today.
 """
 

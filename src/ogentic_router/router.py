@@ -23,9 +23,10 @@ Design notes (mirrors the spec brief §7):
   audit-fingerprint contract. Mirror it; do not roll our own ``hashlib``
   call — Router / Shield / Audit fingerprints must align byte-for-byte.
 
-The Router exposes both :meth:`classify` (pure classification, no routing —
-feeds the OGE-586 MCP tool surface) and :meth:`route` (classify + policy
-evaluate in one call). Both share the same Shield instance.
+The Router exposes :meth:`classify` (pure classification, no routing —
+feeds the OGE-586 MCP tool surface), :meth:`route` (classify + policy
+evaluate in one call), and :meth:`route_analysis` (policy on an analysis the
+caller already ran — no Shield call, no prompt text).
 """
 
 from __future__ import annotations
@@ -419,17 +420,8 @@ class Router:
             effective_ceiling = self._policy.effective_ceiling()
         else:
             effective_ceiling = budget_ceiling
-        start = time.perf_counter()
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        # Pre-classification fallback fingerprint (same format as Shield's
-        # text_hash_for) so an error before classify still carries a hash, not
-        # raw text. Overwritten with the Shield-sourced hash once we classify.
-        prompt_hash = _fingerprint(prompt)
-        result: Any = None
-        projection: ShieldClassification | None = None
-        decision: RouteDecision | None = None
-        error: str | None = None
-        try:
+
+        def analyze() -> Any:
             if effective_ceiling is not None:
                 effective_model = model or "unknown"
                 cost = estimate_cost(effective_model, prompt)
@@ -439,9 +431,42 @@ class Router:
                         ceiling=effective_ceiling,
                         model=effective_model,
                     )
+            return self._ensure_shield().analyze(prompt)
 
-            shield = self._ensure_shield()
-            result = shield.analyze(prompt)
+        # Pre-classification fallback fingerprint (same format as Shield's
+        # text_hash_for) so an error before classify still carries a hash, not
+        # raw text. Overwritten with the Shield-sourced hash once we classify.
+        return self._decide(analyze, prompt_hash=_fingerprint(prompt))
+
+    def route_analysis(self, analysis: Any) -> RouteDecision:
+        """Run the policy on a Shield analysis the caller already has.
+
+        For callers that ran Shield themselves (e.g. a desktop app that already
+        called ``ogentic-shield analyze``): Shield is never invoked and the
+        prompt text is never needed. ``analysis`` is an ``AnalysisResult`` or
+        the output of :func:`~ogentic_router.classification.analysis_from_json`.
+
+        Same path as :meth:`route` after classification: the same
+        :meth:`Policy.evaluate`, the same ``deny_cloud`` fail-closed check, and
+        one shape-only audit row. The budget ceiling is **not** checked — it
+        estimates cost from the prompt text, which this path never sees.
+
+        Raises:
+            CloudRouteDeniedError: the analysis carries a ``deny_cloud`` group
+                and the policy chose a non-local backend.
+        """
+        return self._decide(lambda: analysis, prompt_hash="")
+
+    def _decide(self, get_result: Callable[[], Any], *, prompt_hash: str) -> RouteDecision:
+        """Classify (via ``get_result``), evaluate the policy, enforce deny-cloud, audit."""
+        start = time.perf_counter()
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        result: Any = None
+        projection: ShieldClassification | None = None
+        decision: RouteDecision | None = None
+        error: str | None = None
+        try:
+            result = get_result()
             projection = self._project(result)
             if projection.text_hash:
                 prompt_hash = projection.text_hash

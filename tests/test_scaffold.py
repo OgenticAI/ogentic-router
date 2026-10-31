@@ -14,7 +14,7 @@ from ogentic_router.cli.main import cli
 
 def test_version_is_exposed() -> None:
     assert isinstance(ogentic_router.__version__, str)
-    assert ogentic_router.__version__ == "0.1.0"
+    assert ogentic_router.__version__  # value pinned to pyproject by test_version.py
 
 
 def test_cli_help_runs_clean() -> None:

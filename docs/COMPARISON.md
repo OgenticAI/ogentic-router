@@ -22,7 +22,7 @@ the content leaves the device, or after?**
 | Routing axis | Cost / latency / model | Unified API / cost | Observability / cost / fallback | Cost / provider abstraction | **Content sensitivity** first, then cost |
 | Where the decision runs | Vendor servers | Vendor servers | Vendor / your gateway | Your proxy host | **The caller's process** |
 | Sensitive-content path | Transits vendor + provider | Transits vendor + provider | Transits gateway + provider | Transits proxy + provider | **Can stay on-device (local backend); never transits Ogentic** |
-| Audit of the decision | Vendor dashboard | Vendor dashboard | Vendor dashboard | Your logs | **Shape-only, HMAC-chained, user-held** (v0.2) |
+| Audit of the decision | Vendor dashboard | Vendor dashboard | Vendor dashboard | Your logs | **Shape-only, user-held** (HMAC-chained once `ogentic-audit` ships) |
 | Local LLMs | Not first-class | No | Via provider config | Yes (as a provider) | **First-class, loopback-enforced** |
 | Trust model | Trust the vendor's ZDR claim | Trust the vendor | Trust the gateway | Trust your own deploy | **Open source — verify the claim** |
 
