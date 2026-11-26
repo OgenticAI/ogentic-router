@@ -19,7 +19,7 @@ import asyncio
 import json
 import os
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 
 import click
 
@@ -215,6 +215,11 @@ def _serve_mcp(config_path: str | None) -> None:
 @click.option("--execute", is_flag=True, default=False,
               help="Also dispatch to the chosen backend and print the model output "
                    "(needs a --config with backends).")
+@click.option("--classification", "classification", default=None, type=click.File("r", encoding="utf-8"),
+              metavar="PATH|-",
+              help="Decide from an existing `ogentic-shield analyze --output json` document "
+                   "(a file, or - for stdin) instead of a prompt. Shield is not run and the "
+                   "prompt text is never read. The budget ceiling is not checked on this path.")
 @click.option("--output", "output", type=click.Choice(["json", "text"]), default="json",
               show_default=True, help="Output format.")
 def route(
@@ -224,6 +229,7 @@ def route(
     model: str | None,
     budget_ceiling: float | None,
     execute: bool,
+    classification: IO[str] | None,
     output: str,
 ) -> None:
     """Route a single prompt through the full pipeline and print the decision.
@@ -233,13 +239,30 @@ def route(
     chosen backend and includes the model output. Budget enforcement is ON by
     default (OGE-1120) — a runaway prompt is refused before any network call.
 
+    Pipe the prompt on stdin rather than passing --prompt: argv is visible to
+    other local users in the process table (ps), stdin is not.
+
+    With --classification, the decision comes from a Shield analysis you already
+    have; Shield is not run and no prompt is read.
+
     \b
     Examples:
-      ogentic-router route --config router.yaml --prompt "attorney work product"
-      echo "what's the weather" | ogentic-router route --policy policy.yaml
+      echo "attorney work product" | ogentic-router route --policy policy.yaml
       ogentic-router route --config router.yaml --prompt "hi" --execute
+      ogentic-shield analyze --output json < note.txt \\
+        | ogentic-router route --policy policy.yaml --classification -
     """
-    from ogentic_router import BudgetCeilingExceeded, ShieldUnavailableError  # noqa: PLC0415
+    from ogentic_router import (  # noqa: PLC0415
+        BudgetCeilingExceeded,
+        CloudRouteDeniedError,
+        ShieldUnavailableError,
+    )
+
+    if classification is not None:
+        _route_classification(config_path, policy_path, classification, output,
+                              prompt=prompt, model=model, budget_ceiling=budget_ceiling,
+                              execute=execute)
+        return
 
     router = _load_router(config_path, policy_path)
     text = _read_prompt(prompt)
@@ -250,8 +273,8 @@ def route(
 
     try:
         decision = router.route(text, **route_kwargs)
-    except BudgetCeilingExceeded as exc:
-        click.echo(f"BudgetCeilingExceeded: {exc}", err=True)
+    except (BudgetCeilingExceeded, CloudRouteDeniedError) as exc:
+        click.echo(str(exc), err=True)
         sys.exit(1)
     except ShieldUnavailableError as exc:
         click.echo(f"ERROR: {exc}", err=True)
@@ -262,6 +285,10 @@ def route(
     if execute:
         result["output"] = _dispatch(config_path, decision, text, model)
 
+    _print_decision(result, output)
+
+
+def _print_decision(result: dict[str, Any], output: str) -> None:
     if output == "json":
         click.echo(json.dumps(result, indent=2))
     else:
@@ -271,6 +298,51 @@ def route(
         click.echo(f"reason:    {result['reasoning']}")
         if "output" in result:
             click.echo(f"output:    {result['output']}")
+
+
+def _route_classification(
+    config_path: str | None,
+    policy_path: str | None,
+    fp: IO[str],
+    output: str,
+    *,
+    prompt: str | None,
+    model: str | None,
+    budget_ceiling: float | None,
+    execute: bool,
+) -> None:
+    """``route --classification``: policy on an existing Shield analysis. Never runs Shield."""
+    from ogentic_router import CloudRouteDeniedError, RouterError  # noqa: PLC0415
+    from ogentic_router.classification import analysis_from_json  # noqa: PLC0415
+
+    # These all need the prompt text, which this path deliberately never reads.
+    conflicting = [flag for flag, value in (
+        ("--prompt", prompt is not None),
+        ("--model", model is not None),
+        ("--budget-ceiling", budget_ceiling is not None),
+        ("--execute", execute),
+    ) if value]
+    if conflicting:
+        raise click.UsageError(
+            f"--classification cannot be combined with {', '.join(conflicting)}: "
+            "those need the prompt text, which this path never reads."
+        )
+
+    router = _load_router(config_path, policy_path)
+    try:
+        doc = json.load(fp)
+    except json.JSONDecodeError as exc:
+        click.echo(f"ERROR: --classification is not valid JSON: {exc}", err=True)
+        sys.exit(2)
+    try:
+        decision = router.route_analysis(analysis_from_json(doc))
+    except CloudRouteDeniedError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+    except RouterError as exc:  # ClassificationError, ShieldUnavailableError
+        click.echo(f"ERROR: --classification: {exc}", err=True)
+        sys.exit(2)
+    _print_decision(_decision_dict(decision), output)
 
 
 def _dispatch(
@@ -400,14 +472,7 @@ def policies_dry_run(path: str, prompt: str | None, output: str) -> None:
         click.echo(f"ERROR: {exc}", err=True)
         sys.exit(2)
 
-    result = _decision_dict(decision)
-    if output == "json":
-        click.echo(json.dumps(result, indent=2))
-    else:
-        click.echo(f"backend:   {result['backend_id']}")
-        click.echo(f"rule:      {result['rule_id'] or '(default_backend)'}")
-        click.echo(f"transform: {result['transform'] or '(none)'}")
-        click.echo(f"reason:    {result['reasoning']}")
+    _print_decision(_decision_dict(decision), output)
 
 
 if __name__ == "__main__":

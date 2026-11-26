@@ -12,9 +12,9 @@
 # cloud backend below is commented out — uncomment it *and* export
 # OPENAI_API_KEY, or the server will refuse to start.
 #
-# v0.1 caveat: the server selects the backend named by the policy's
+# 0.2.0 caveat: the server selects the backend named by the policy's
 # `default_backend` (it does not yet run the full Shield -> policy pipeline
-# per-request; that lands in v0.2, OGE-584). The policy is still loaded and
+# per-request; not built yet). The policy is still loaded and
 # surfaced at GET /v1/policy so you can inspect the rules that WILL apply.
 
 version: 1

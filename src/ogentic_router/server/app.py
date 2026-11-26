@@ -42,6 +42,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from ogentic_router import __version__
 from ogentic_router.errors import ConfigError, ServerError
 from ogentic_router.server._normalize import _new_request_id, to_openai_chunk, to_openai_response
 from ogentic_router.server._sse import sse_data, sse_done
@@ -180,7 +181,7 @@ def create_app(
     app = FastAPI(
         title="ogentic-router",
         description="OpenAI-shaped router that applies privacy-aware routing policies.",
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
 
@@ -318,7 +319,7 @@ def create_app(
         """
         return {
             "id": decision_id,
-            "detail": "Decision audit is not available in v0.1 (ogentic-audit integration pending)",
+            "detail": "Decision lookup is not available yet (ogentic-audit integration pending)",
             "status": "not_found",
         }
 

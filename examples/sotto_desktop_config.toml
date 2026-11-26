@@ -13,9 +13,9 @@
 # Sotto ships this file inside the app bundle and passes its path to the router.
 router_config = "resources/router.yaml"
 
-# Where Sotto writes the decision log. Until ogentic-audit emission ships (v0.2,
-# OGE-584) this is the sink Sotto's own wrapper appends RouteDecision.to_dict()
-# rows to; afterwards it becomes the ogentic-audit log destination.
+# Where the router writes its shape-only decision log (LocalFileSink, the
+# `audit:` block in router.yaml). Becomes the ogentic-audit log destination once
+# that library ships.
 audit_log = "~/Library/Application Support/Sotto/router-decisions.jsonl"
 
 [router.local]

@@ -95,11 +95,10 @@ resp = client.chat.completions.create(
 Verify what the router will do by reading the loaded policy at
 `GET /v1/policy`. Runnable: [`examples/openai_sdk_swap.py`](examples/openai_sdk_swap.py).
 
-> **v0.1 caveat:** the server dispatches to the policy's `default_backend`; the
-> full per-request Shield → policy selection lands in v0.2
-> ([OGE-584](https://linear.app/ogenticai/issue/OGE-584)). The **library**
-> `Router` makes the full per-prompt decision today. See
-> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+> **0.2.0 caveat:** the server dispatches to the policy's `default_backend`;
+> per-request Shield → policy selection in the server is not built yet. The
+> **library** `Router` and the `route` CLI make the full per-prompt decision
+> today. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## CLI
 
@@ -107,27 +106,48 @@ The `ogentic-router` command has three subcommands. Every subcommand that needs 
 router accepts `--config <router.yaml>` or `--policy <policy.yaml>`, falling back
 to `$ROUTER_CONFIG`.
 
+The commands below run from a checkout of this repo (they use `examples/`) and
+need the `[shield]` extra: `pip install "ogentic-router[shield]"`.
+
 ```bash
 # Route one prompt through the pipeline; print the decision (JSON by default)
-ogentic-router route --policy examples/policy.yaml --prompt "attorney work product"
-echo "what's the weather" | ogentic-router route --config router.yaml --output text
+echo "attorney work product" | ogentic-router route --policy examples/policy.yaml
+echo "what's the weather" | ogentic-router route --config examples/router.yaml --output text
 
 # --execute also dispatches to the chosen backend and prints the model output
-# (needs a --config that declares backends). Budget enforcement is ON by default.
-ogentic-router route --config router.yaml --prompt "summarize this" --execute
+# (needs a --config that declares the chosen backend, and that backend running;
+# examples/router.yaml declares only ollama-local, so this one stays local)
+echo "Summarize this privileged attorney memo." | ogentic-router route --config examples/router.yaml --execute
+
+# Already ran Shield? Decide from its JSON — Shield isn't run again and the
+# router never sees the prompt
+echo "attorney work product" | ogentic-shield analyze --output json > analysis.json
+ogentic-router route --policy examples/policy.yaml --classification analysis.json
 
 # Inspect / validate a policy — no server, no model call
 ogentic-router policies validate examples/policy.yaml   # exit 0 ok, 2 on error
 ogentic-router policies show     examples/policy.yaml   # pretty rule table
-ogentic-router policies dry-run  examples/policy.yaml --prompt "..."  # decision only
+echo "attorney work product" | ogentic-router policies dry-run examples/policy.yaml
 
 # Boot the server (HTTP, or the stdio MCP surface with --mcp)
-ogentic-router serve --config router.yaml --port 8080
+ogentic-router serve --config examples/router.yaml --port 8080
 ```
 
 `route` runs Shield + policy and returns the **decision**; `--execute` adds the
 dispatch. `policies dry-run` is the safe "what would happen" inspector — it never
 calls a backend.
+
+**Pipe the prompt on stdin.** `--prompt "..."` works, but command-line arguments
+are visible to other users on the machine (`ps`, `/proc/<pid>/cmdline`); stdin
+is not.
+
+**`--classification <path|->`** takes the JSON `ogentic-shield analyze --output
+json` prints (a file, or `-` for stdin) and returns the same decision `route`
+would for that analysis. It reads `score` and each entity's `category` and
+`category_group`, never the matched `text`. Deny-cloud and the audit row still
+apply; the budget ceiling does not, because it estimates cost from the prompt.
+It can't be combined with `--prompt`, `--execute`, `--model` or
+`--budget-ceiling`. Malformed input exits 2; a deny-cloud refusal exits 1.
 
 ## Policy DSL
 
@@ -348,10 +368,10 @@ the demo image and deploy config stay out of the library.
 - [`examples/sotto_desktop_config.toml`](examples/sotto_desktop_config.toml) — Sotto embed config
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/POLICY_REFERENCE.md](docs/POLICY_REFERENCE.md) · [docs/COMPARISON.md](docs/COMPARISON.md) · [docs/PRIVACY_POSTURE.md](docs/PRIVACY_POSTURE.md) · [docs/SOTTO_INTEGRATION.md](docs/SOTTO_INTEGRATION.md) · [ADR-0001](docs/adr/0001-router-architecture.md)
 
-## What's next (v0.2)
+## What's next
 
-Per-request Shield pipeline in the server, the `OgenticAuditSink` (HMAC-chained,
-once `ogentic-audit` ships), and a drop-in proxy demo. Track the
+Per-request Shield pipeline in the server, and the `OgenticAuditSink`
+(HMAC-chained, once `ogentic-audit` ships). Track the
 [Linear project](https://linear.app/ogenticai/project/ogentic-router-oss-46e612b52d27).
 
 ## License
@@ -364,5 +384,5 @@ Apache-2.0. See [LICENSE](LICENSE). Security: [SECURITY.md](SECURITY.md).
 |---|---|---|
 | [`ogentic-shield`](https://github.com/OgenticAI/ogentic-shield) | Privilege / PHI / MNPI detection | Published |
 | `ogentic-audit` | HMAC-chained audit log | In flight |
-| **`ogentic-router`** | Privacy-aware routing | **v0.1.0 (this repo)** |
+| **`ogentic-router`** | Privacy-aware routing | **v0.2.0 (this repo)** |
 | `sotto-desktop` | Privilege-protected desktop AI | v1 in flight |
