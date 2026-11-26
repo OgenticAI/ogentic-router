@@ -13,9 +13,17 @@ url="$2"
 # ──────────────────────────────────────────────────────────────────────────
 # OgenticAI identity gate (1/2) — gh CLI account
 # ──────────────────────────────────────────────────────────────────────────
-# All OgenticAI pushes must run under the org-admin GitHub account
-# (davidoladeji-ogenticai). Pushing as davidoladeji breaks Vercel preview
+# All OgenticAI pushes must run under an OgenticAI work account, never a
+# personal one. Pushing as a personal account breaks Vercel preview
 # attribution and confuses OgenticAI Reviewer's contributor signals.
+#
+# Approved accounts:
+#   davidoladeji-ogenticai  David, org admin
+#   den-ogenticai           Dennis, and the agents that push as him
+#
+# Until 2026-11 this allowed davidoladeji-ogenticai only, so every repo the kit
+# synced into blocked den-ogenticai. finops-ogentic patched its own copy, and
+# kit syncs overwrote that patch three times (#88, #107, #108).
 #
 # Bypass for a single push (use sparingly; explain in PR):
 #   OGENTICAI_BYPASS_IDENTITY=1 git push ...
@@ -23,9 +31,10 @@ url="$2"
 if [[ "${OGENTICAI_BYPASS_IDENTITY:-0}" != "1" ]]; then
   if command -v gh >/dev/null 2>&1; then
     logged_in="$(gh api user --jq .login 2>/dev/null || true)"
-    if [[ -n "$logged_in" && "$logged_in" != "davidoladeji-ogenticai" ]]; then
-      echo "❌ gh auth is active as '$logged_in'. OgenticAI pushes must use 'davidoladeji-ogenticai'."
-      echo "   Fix:    gh auth switch -u davidoladeji-ogenticai"
+    approved=" davidoladeji-ogenticai den-ogenticai "
+    if [[ -n "$logged_in" && "$approved" != *" $logged_in "* ]]; then
+      echo "❌ gh auth is active as '$logged_in'. OgenticAI pushes must use an OgenticAI work account:${approved% }."
+      echo "   Fix:    gh auth switch -u <your work account>"
       echo "   Bypass: OGENTICAI_BYPASS_IDENTITY=1 git push ..."
       exit 1
     fi
@@ -83,10 +92,22 @@ if [[ "${OGENTICAI_BYPASS_IDENTITY:-0}" != "1" ]]; then
 fi
 
 
+# Language checks run against this repo's own project. The kit's files under
+# .claude/ are not part of it, and without a package.json or pyproject.toml
+# there is no project for pnpm or uv to check.
+project_files="$(echo "$changed_files" | grep -v '^\.claude/' || true)"
 has_ts="false"
 has_py="false"
-echo "$changed_files" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' >/dev/null && has_ts="true" || true
-echo "$changed_files" | grep -E '\.py$' >/dev/null && has_py="true" || true
+echo "$project_files" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' >/dev/null && has_ts="true" || true
+echo "$project_files" | grep -E '\.py$' >/dev/null && has_py="true" || true
+if [[ "$has_ts" == "true" && ! -f package.json ]]; then
+  echo "⚠️  TS checks skipped (no package.json)"
+  has_ts="false"
+fi
+if [[ "$has_py" == "true" && ! -f pyproject.toml ]]; then
+  echo "⚠️  Python checks skipped (no pyproject.toml)"
+  has_py="false"
+fi
 
 run_or_skip () {
   local label="$1"; shift
